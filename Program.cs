@@ -557,25 +557,31 @@ public unsafe class Program
     static readonly void*[] tables = new void*[3];
     static readonly void*[] impls = new void*[3];
 
+    const nint SupportNone = 0;
+    const nint SupportComInterface1 = 1;
+    const nint SupportComInterface2 = 2;
+    const nint SupportComInterface3 = 4;
+
     [UnmanagedCallersOnly]
     static int QueryInterface(void* thisPtr, Guid* iid, void** ppObj)
     {
-        if (*iid == GetTypeKey<IComInterface1>())
+        var inst = new ReadOnlySpan<nint>(thisPtr, 2);
+        if (*iid == GetTypeKey<IComInterface1>() && (inst[1] & SupportComInterface1) != 0)
         {
             *ppObj = impls[0];
         }
-        else if (*iid == GetTypeKey<IComInterface2>())
+        else if (*iid == GetTypeKey<IComInterface2>() && (inst[1] & SupportComInterface2) != 0)
         {
             *ppObj = impls[1];
         }
-        else if (*iid == GetTypeKey<IComInterface3>())
+        else if (*iid == GetTypeKey<IComInterface3>() && (inst[1] & SupportComInterface3) != 0)
         {
             *ppObj = impls[2];
         }
         else
         {
-            Debug.Fail("QI failed");
-            return -1;
+            const int E_NOINTERFACE = unchecked((int)0x80004002);
+            return E_NOINTERFACE;
         }
 
         Console.WriteLine($"--- {nameof(QueryInterface)}");
@@ -663,7 +669,17 @@ public unsafe class Program
         // Build the instances
         for (int i = 0; i < impls.Length; ++i)
         {
-            void** instance = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(Program), sizeof(void*));
+            void** instance = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(Program), 2 * sizeof(void*));
+
+            // Define which interfaces for each instance
+            var inst = new Span<nint>(instance, 2);
+            inst[1] = i switch
+            {
+                0 => SupportComInterface1,
+                1 => SupportComInterface1 | SupportComInterface3,
+                2 => SupportComInterface2,
+                _ => SupportNone
+            };
 
             // Set up the instance with the vtable
             instance[0] = tables[i];
