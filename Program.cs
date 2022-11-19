@@ -111,6 +111,12 @@ public unsafe interface IIUnknownCacheStrategy
     /// <param name="info">A <see cref="TableInfo"/> instance</param>
     /// <returns>True if set, otherwise false.</returns>
     bool TrySetTableInfo(RuntimeTypeHandle handle, TableInfo info);
+
+    /// <summary>
+    /// Clear the cache
+    /// </summary>
+    /// <param name="unknownStrategy">The <see cref="IIUnknownStrategy"/> to use for clearing</param>
+    void Clear(IIUnknownStrategy unknownStrategy);
 }
 
 public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider<InterfaceId>
@@ -123,6 +129,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
 
     ~ComObject()
     {
+        CacheStrategy.Clear(IUnknownStrategy);
         IUnknownStrategy.Release(ThisPtr);
     }
 
@@ -302,6 +309,7 @@ internal sealed unsafe class MyDisposableComObject : MyComObjectBase, IDisposabl
         {
             return;
         }
+        CacheStrategy.Clear(IUnknownStrategy);
         IUnknownStrategy.Release(ThisPtr);
         GC.SuppressFinalize(this);
         _isDisposed = true;
@@ -338,7 +346,7 @@ internal sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
 
 internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
 {
-    // [TODO] Implement some smart caching
+    // [TODO] Implement some smart/thread-safe caching
     private Dictionary<RuntimeTypeHandle, IIUnknownCacheStrategy.TableInfo> _cache = new();
 
     bool IIUnknownCacheStrategy.TryConstructTableInfo(RuntimeTypeHandle handle, void* ptr, out IIUnknownCacheStrategy.TableInfo info)
@@ -382,6 +390,15 @@ internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
     bool IIUnknownCacheStrategy.TrySetTableInfo(RuntimeTypeHandle handle, IIUnknownCacheStrategy.TableInfo info)
     {
         return _cache.TryAdd(handle, info);
+    }
+
+    void IIUnknownCacheStrategy.Clear(IIUnknownStrategy unknownStrategy)
+    {
+        foreach (var info in _cache.Values)
+        {
+            _ = unknownStrategy.Release(info.ThisPtr);
+        }
+        _cache.Clear();
     }
 }
 
@@ -495,7 +512,9 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface1>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[0].VTableFirstInstance])(thisPtr);
                 if (hr < 0)
+                {
                     Marshal.ThrowExceptionForHR(hr);
+                }
             }
         }
     }
@@ -515,7 +534,9 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[1].VTableFirstInstance])(thisPtr);
                 if (hr < 0)
+                {
                     Marshal.ThrowExceptionForHR(hr);
+                }
             }
         }
         void IComInterface2.Method2()
@@ -525,7 +546,9 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[1].VTableFirstInstance + 1])(thisPtr);
                 if (hr < 0)
+                {
                     Marshal.ThrowExceptionForHR(hr);
+                }
             }
         }
     }
@@ -545,7 +568,9 @@ public partial interface IComInterface3 : IUnmanagedInterfaceType<InterfaceId>
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface3>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[2].VTableFirstInstance])(thisPtr);
                 if (hr < 0)
+                {
                     Marshal.ThrowExceptionForHR(hr);
+                }
             }
         }
     }
@@ -687,17 +712,26 @@ public unsafe class Program
         }
 
         // Test the instances
-        for (int i = 0; i < impls.Length; ++i)
-        {
-            Console.WriteLine($"=== Instance {i}");
-            Run(new MyComObject(impls[i]));
-        }
+        Run();
 
+        // Clean up the RCWs
         GC.Collect();
         GC.WaitForPendingFinalizers();
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static void Run(object obj)
+        static void Run()
+        {
+            for (int i = 0; i < impls.Length; ++i)
+            {
+                Console.WriteLine($"=== Instance {i}");
+                var rcw = new MyComObject(impls[i]);
+                InspectObject(rcw);
+                InspectObject(rcw);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void InspectObject(object obj)
         {
             if (obj is IComInterface1 c1)
             {
