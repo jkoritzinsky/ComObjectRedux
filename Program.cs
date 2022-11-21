@@ -40,6 +40,11 @@ public interface IUnmanagedInterfaceType<T> where T : IEquatable<T>
 #endregion Base impl
 
 #region COM layer
+public interface IUnknown : IUnmanagedInterfaceType<InterfaceId>
+{
+    static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid("00000000-0000-0000-C000-000000000046"));
+}
+
 public readonly record struct InterfaceId(Guid Iid);
 
 /// <summary>
@@ -216,27 +221,6 @@ public abstract class GeneratedComWrappersBase<TComObject> : ComWrappers
     }
 }
 #endregion COM layer
-
-#region User defined
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-public partial interface IComInterface1
-{
-    void Method();
-}
-
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-public partial interface IComInterface2
-{
-    void Method1();
-    void Method2();
-}
-
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-public partial interface IComInterface3
-{
-    void Method();
-}
-#endregion User defined
 
 #region Generated
 // Generated base for v1.0 supported runtime scenarios.
@@ -577,8 +561,73 @@ public partial interface IComInterface3 : IUnmanagedInterfaceType<InterfaceId>
 }
 #endregion Generated
 
+#region User defined
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public partial interface IComInterface1
+{
+    void Method();
+}
+
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public partial interface IComInterface2
+{
+    void Method1();
+    void Method2();
+}
+
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public partial interface IComInterface3
+{
+    void Method();
+}
+#endregion User defined
+
 public unsafe class Program
 {
+    private static void Main(string[] args)
+    {
+        // Activate native COM instances
+        void*[] instances = ActivateNativeCOMInstances();
+
+        // Test the instances
+        Run(instances);
+
+        // Clean up the RCWs
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void Run(void*[] instances)
+        {
+            for (int i = 0; i < instances.Length; ++i)
+            {
+                Console.WriteLine($"=== Instance {i}");
+                var rcw = new MyComObject(instances[i]); // This would be replaced with a ComWrappers implementation.
+                InspectObject(rcw);
+                InspectObject(rcw);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void InspectObject(object obj)
+        {
+            if (obj is IComInterface1 c1)
+            {
+                c1.Method();
+            }
+            if (obj is IComInterface2 c2)
+            {
+                c2.Method1();
+                c2.Method2();
+            }
+            if (obj is IComInterface3 c3)
+            {
+                c3.Method();
+            }
+        }
+    }
+
+#region Unmanaged code region
     static readonly void*[] tables = new void*[3];
     static readonly void*[] impls = new void*[3];
 
@@ -662,7 +711,7 @@ public unsafe class Program
         return 0;
     }
 
-    private static void Main(string[] args)
+    private static void*[] ActivateNativeCOMInstances()
     {
         void** table;
         {
@@ -711,41 +760,7 @@ public unsafe class Program
             impls[i] = instance;
         }
 
-        // Test the instances
-        Run();
-
-        // Clean up the RCWs
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        static void Run()
-        {
-            for (int i = 0; i < impls.Length; ++i)
-            {
-                Console.WriteLine($"=== Instance {i}");
-                var rcw = new MyComObject(impls[i]);
-                InspectObject(rcw);
-                InspectObject(rcw);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        static void InspectObject(object obj)
-        {
-            if (obj is IComInterface1 c1)
-            {
-                c1.Method();
-            }
-            if (obj is IComInterface2 c2)
-            {
-                c2.Method1();
-                c2.Method2();
-            }
-            if (obj is IComInterface3 c3)
-            {
-                c3.Method();
-            }
-        }
+        return impls;
     }
+#endregion Unmanaged code region
 }
