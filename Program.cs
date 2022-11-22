@@ -1,5 +1,7 @@
 ﻿using System.Collections;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -24,28 +26,60 @@ public readonly ref struct VirtualMethodTableInfo
 
 public interface IUnmanagedVirtualMethodTableProvider<T> where T : IEquatable<T>
 {
-    protected VirtualMethodTableInfo GetVirtualMethodTableInfoForKey(T typeKey);
+    protected VirtualMethodTableInfo GetVirtualMethodTableInfoForKey(T typeKey, Type t);
 
     public sealed VirtualMethodTableInfo GetVirtualMethodTableInfoForKey<TUnmanagedInterfaceType>()
         where TUnmanagedInterfaceType : IUnmanagedInterfaceType<T>
     {
-        return GetVirtualMethodTableInfoForKey(TUnmanagedInterfaceType.TypeKey);
+        return GetVirtualMethodTableInfoForKey(TUnmanagedInterfaceType.TypeKey, typeof(TUnmanagedInterfaceType));
     }
 }
 
 public interface IUnmanagedInterfaceType<T> where T : IEquatable<T>
 {
     public abstract static T TypeKey { get; }
+    public abstract static Type ManagedProjection { get; }
 }
 #endregion Base impl
 
 #region COM layer
-public interface IUnknown : IUnmanagedInterfaceType<InterfaceId>
+public readonly record struct InterfaceId(Guid Iid);
+
+interface IUnknownDerivedDetails
 {
-    static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid("00000000-0000-0000-C000-000000000046"));
+    public Guid Iid { get; }
+    public Type Implementation { get; }
+    public int VTableTotalLength { get; }
+
+    public static bool TryGet(RuntimeTypeHandle handle, [NotNullWhen(true)] out IUnknownDerivedDetails? details)
+    {
+        var type = Type.GetTypeFromHandle(handle);
+        if (type is null)
+        {
+            details = default;
+        }
+        else
+        {
+            details = (IUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<>));
+        }
+
+        return details is not null;
+    }
 }
 
-public readonly record struct InterfaceId(Guid Iid);
+[AttributeUsage(AttributeTargets.Interface)]
+public class IUnknownDerivedAttribute<T> : Attribute, IUnknownDerivedDetails
+    where T : IUnmanagedInterfaceType<InterfaceId>
+{
+    public IUnknownDerivedAttribute(int vtableTotalLength)
+    {
+        VTableTotalLength = vtableTotalLength;
+    }
+
+    public Guid Iid => T.TypeKey.Iid;
+    public Type Implementation => T.ManagedProjection;
+    public int VTableTotalLength { get; init; }
+}
 
 /// <summary>
 /// IUnknown interaction strategy.
@@ -83,14 +117,6 @@ public unsafe interface IIUnknownCacheStrategy
         public int TableLength { get; init; }
         public RuntimeTypeHandle ManagedType { get; init; }
     }
-
-    /// <summary>
-    /// Map an IID to a its interface's <see cref="RuntimeTypeHandle"/>.
-    /// </summary>
-    /// <param name="iid">Interface ID</param>
-    /// <param name="handle">RuntimeTypeHandle instance</param>
-    /// <returns>True if a mapping exists, otherwise false.</returns>
-    bool TryMapIidToInterfaceHandle(Guid iid, out RuntimeTypeHandle handle);
 
     /// <summary>
     /// Construct a <see cref="TableInfo"/> instance.
@@ -194,23 +220,17 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
         return true;
     }
 
-    VirtualMethodTableInfo IUnmanagedVirtualMethodTableProvider<InterfaceId>.GetVirtualMethodTableInfoForKey(InterfaceId typeKey)
+    VirtualMethodTableInfo IUnmanagedVirtualMethodTableProvider<InterfaceId>.GetVirtualMethodTableInfoForKey(InterfaceId typeKey, Type type)
     {
-        Guid iid = typeKey.Iid;
-
-        if (!CacheStrategy.TryMapIidToInterfaceHandle(iid, out RuntimeTypeHandle handle))
-        {
-            throw new TypeAccessException();
-        }
-
         IIUnknownCacheStrategy.TableInfo result;
-        if (!LookUpVTableInfo(handle, out result, out int qiHResult))
+        if (!LookUpVTableInfo(type.TypeHandle, out result, out int qiHResult))
         {
             Marshal.ThrowExceptionForHR(qiHResult);
         }
 
         return new((nint)result.ThisPtr, new ReadOnlySpan<nint>(result.Table, result.TableLength));
     }
+
 }
 
 public abstract class GeneratedComWrappersBase<TComObject> : ComWrappers
@@ -306,12 +326,13 @@ internal sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
 
     unsafe int IIUnknownStrategy.QueryInterface(void* thisPtr, RuntimeTypeHandle handle, out void* ppObj)
     {
-        if (!ComProxies.TryFindGuid(handle, out Guid iid))
+        if (!IUnknownDerivedDetails.TryGet(handle, out IUnknownDerivedDetails? details))
         {
             ppObj = null;
             return -1; // [TODO] What is the HRESULT here?
         }
 
+        Guid iid = details.Iid;
         int hr = Marshal.QueryInterface((nint)thisPtr, ref iid, out nint ppv);
         if (hr < 0)
         {
@@ -335,8 +356,7 @@ internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
 
     bool IIUnknownCacheStrategy.TryConstructTableInfo(RuntimeTypeHandle handle, void* ptr, out IIUnknownCacheStrategy.TableInfo info)
     {
-        if (!ComProxies.TryFindGuid(handle, out Guid iid)
-            || !ComProxies.TryFindImpl(iid, out var impl))
+        if (!IUnknownDerivedDetails.TryGet(handle, out IUnknownDerivedDetails? details))
         {
             info = default;
             return false;
@@ -347,8 +367,8 @@ internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
         {
             ThisPtr = obj,
             Table = *obj,
-            TableLength = impl.VTableTotalLength,
-            ManagedType = impl.Impl.TypeHandle
+            TableLength = details.VTableTotalLength,
+            ManagedType = details.Implementation.TypeHandle
         };
 
         return true;
@@ -357,18 +377,6 @@ internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
     bool IIUnknownCacheStrategy.TryGetTableInfo(RuntimeTypeHandle handle, out IIUnknownCacheStrategy.TableInfo info)
     {
         return _cache.TryGetValue(handle, out info);
-    }
-
-    bool IIUnknownCacheStrategy.TryMapIidToInterfaceHandle(Guid iid, out RuntimeTypeHandle handle)
-    {
-        if (!ComProxies.TryFindImpl(iid, out var impl))
-        {
-            handle = default;
-            return false;
-        }
-
-        handle = impl.Interface.TypeHandle;
-        return true;
     }
 
     bool IIUnknownCacheStrategy.TrySetTableInfo(RuntimeTypeHandle handle, IIUnknownCacheStrategy.TableInfo info)
@@ -388,15 +396,7 @@ internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
 
 internal static class ComProxies
 {
-    // Ordered - the first integer must be encoded in little endian form.
-    //
-    // Note that data in this array is not guaranteed to be aligned in a manner that makes a
-    // conversion to Guid possible. Consider the case where MemoryMarshal.Cast<byte, Guid>()
-    // is used to search this blob. The MemoryMarshal.Cast<> API doesn't handle unaligned data.
-    // A potential mitigation here is to write a specialized binary search for this data
-    // structure that uses memcmp() with bytes and avoid all memory alignment issues.
-    //
-    // Perhaps have different versions for alignment sensitive/non-sensitive platforms?
+    // Note: the first integer must be encoded in little endian form.
     public static ReadOnlySpan<byte> Iids => new byte[]
     {
         // 2c3f9903-b586-46b1-881b-adfce9af47b1
@@ -406,95 +406,23 @@ internal static class ComProxies
         // 2c3f9903-b586-46b1-881b-adfce9af47b3
         0x03, 0x99, 0x3f, 0x2c, 0xb5, 0x86, 0x46, 0xb1, 0x88, 0x1b, 0xad, 0xfc, 0xe9, 0xaf, 0x47, 0xb3,
     };
-
-    public static unsafe bool TryFindImpl(Guid guid, out (Type Interface, Type Impl, int VTableTotalLength, int VTableFirstInstance) impl)
-    {
-        const int elementSize = 16;
-        Debug.Assert(elementSize == sizeof(Guid));
-
-        var key = new ReadOnlySpan<byte>((byte*)&guid, elementSize);
-        int count = Iids.Length / elementSize;
-
-        int baseIdx = 0;
-        while (count > 0)
-        {
-            var rowIdx = baseIdx + elementSize * (count / 2);
-            int res = key.SequenceCompareTo(Iids.Slice(rowIdx, elementSize));
-            if (res == 0)
-            {
-                impl = Impls[rowIdx / 16];
-                return true;
-            }
-
-            if (count == 1)
-            {
-                break;
-            }
-            else if (res < 0)
-            {
-                count /= 2;
-            }
-            else
-            {
-                baseIdx = rowIdx;
-                count -= count / 2;
-            }
-        }
-        impl = default;
-        return false;
-    }
-
-    public static bool TryFindGuid(RuntimeTypeHandle handle, out Guid iid)
-    {
-        Type type = Type.GetTypeFromHandle(handle)!;
-        if (type == typeof(IComInterface1))
-        {
-            iid = GetTypeKey<IComInterface1>();
-        }
-        else if (type == typeof(IComInterface2))
-        {
-            iid = GetTypeKey<IComInterface2>();
-        }
-        else if (type == typeof(IComInterface3))
-        {
-            iid = GetTypeKey<IComInterface3>();
-        }
-        else
-        {
-            iid = default;
-            return false;
-        }
-
-        return true;
-
-        static Guid GetTypeKey<T>()
-            where T : IUnmanagedInterfaceType<InterfaceId>
-        {
-            return T.TypeKey.Iid;
-        }
-    }
-
-    // Order matches that of Iids property above.
-    public static readonly (Type Interface, Type Impl, int VTableTotalLength, int VTableFirstInstance)[] Impls = new[]
-    {
-        (typeof(IComInterface1), typeof(IComInterface1.Impl), 4, 3),
-        (typeof(IComInterface2), typeof(IComInterface2.Impl), 5, 3),
-        (typeof(IComInterface3), typeof(IComInterface3.Impl), 4, 3),
-    };
 }
 
+[IUnknownDerived<IComInterface1>(4)]
 public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(0 * 16, 16)));
+    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
+
     [DynamicInterfaceCastableImplementation]
-    internal interface Impl : IComInterface1, IUnmanagedInterfaceType<InterfaceId>
+    internal interface Impl : IComInterface1
     {
         void IComInterface1.Method()
         {
             unsafe
             {
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface1>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[0].VTableFirstInstance])(thisPtr);
+                int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
                     Marshal.ThrowExceptionForHR(hr);
@@ -504,9 +432,11 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
     }
 }
 
+[IUnknownDerived<IComInterface2>(5)]
 public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(1 * 16, 16)));
+    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface2
@@ -516,7 +446,7 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
             unsafe
             {
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[1].VTableFirstInstance])(thisPtr);
+                int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
                     Marshal.ThrowExceptionForHR(hr);
@@ -528,7 +458,7 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
             unsafe
             {
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[1].VTableFirstInstance + 1])(thisPtr);
+                int hr = ((delegate* unmanaged<nint, int>)vtable[4])(thisPtr);
                 if (hr < 0)
                 {
                     Marshal.ThrowExceptionForHR(hr);
@@ -538,19 +468,21 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
     }
 }
 
+[IUnknownDerived<IComInterface3>(4)]
 public partial interface IComInterface3 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(2 * 16, 16)));
+    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
 
     [DynamicInterfaceCastableImplementation]
-    internal interface Impl : IComInterface3, IUnmanagedInterfaceType<InterfaceId>
+    internal interface Impl : IComInterface3
     {
         void IComInterface3.Method()
         {
             unsafe
             {
                 var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface3>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[ComProxies.Impls[2].VTableFirstInstance])(thisPtr);
+                int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
                     Marshal.ThrowExceptionForHR(hr);
