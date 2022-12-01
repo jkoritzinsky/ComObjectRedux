@@ -38,47 +38,43 @@ public interface IUnmanagedVirtualMethodTableProvider<T> where T : IEquatable<T>
 public interface IUnmanagedInterfaceType<T> where T : IEquatable<T>
 {
     public abstract static T TypeKey { get; }
-    public abstract static Type ManagedProjection { get; }
+
+    public abstract static int VTableLength { get; }
 }
 #endregion Base impl
 
 #region COM layer
 public readonly record struct InterfaceId(Guid Iid);
 
-interface IUnknownDerivedDetails
+public interface IUnknownDerivedDetails
 {
     public Guid Iid { get; }
     public Type Implementation { get; }
     public int VTableTotalLength { get; }
 
-    public static bool TryGet(RuntimeTypeHandle handle, [NotNullWhen(true)] out IUnknownDerivedDetails? details)
+    internal static IUnknownDerivedDetails? GetFromAttribute(RuntimeTypeHandle handle)
     {
         var type = Type.GetTypeFromHandle(handle);
         if (type is null)
         {
-            details = default;
+            return null;
         }
-        else
-        {
-            details = (IUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<>));
-        }
-
-        return details is not null;
+        return (IUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<,>));
     }
 }
 
 [AttributeUsage(AttributeTargets.Interface)]
-public class IUnknownDerivedAttribute<T> : Attribute, IUnknownDerivedDetails
+public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDetails
     where T : IUnmanagedInterfaceType<InterfaceId>
+    where TImpl : T
 {
-    public IUnknownDerivedAttribute(int vtableTotalLength)
+    public IUnknownDerivedAttribute()
     {
-        VTableTotalLength = vtableTotalLength;
     }
 
     public Guid Iid => T.TypeKey.Iid;
-    public Type Implementation => T.ManagedProjection;
-    public int VTableTotalLength { get; init; }
+    public Type Implementation => typeof(TImpl);
+    public int VTableTotalLength => T.VTableLength;
 }
 
 /// <summary>
@@ -90,11 +86,11 @@ public unsafe interface IIUnknownStrategy
     /// Perform a QueryInterface() for an IID on the unmanaged IUnknown.
     /// </summary>
     /// <param name="thisPtr">The IUnknown instance.</param>
-    /// <param name="handle">The IID (Interface ID) to query for.</param>
+    /// <param name="iid">The IID (Interface ID) to query for.</param>
     /// <param name="ppObj">The resulting interface</param>
     /// <returns>Returns an HRESULT represents the success of the operation</returns>
     /// <seealso cref="Marshal.QueryInterface(nint, ref Guid, out nint)"/>
-    public int QueryInterface(void* thisPtr, RuntimeTypeHandle handle, out void* ppObj);
+    public int QueryInterface(void* thisPtr, in Guid iid, out void* ppObj);
 
     /// <summary>
     /// Perform a Release() call on the supplied IUnknown instance.
@@ -103,6 +99,11 @@ public unsafe interface IIUnknownStrategy
     /// <returns>The current reference count.</returns>
     /// <seealso cref="Marshal.Release(nint)"/>
     public int Release(void* thisPtr);
+}
+
+public unsafe interface IIUnknownInterfaceDetailsStrategy
+{
+     IUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type);
 }
 
 /// <summary>
@@ -125,7 +126,7 @@ public unsafe interface IIUnknownCacheStrategy
     /// <param name="ptr">Pointer to the instance to query</param>
     /// <param name="info">A <see cref="TableInfo"/> instance</param>
     /// <returns>True if success, otherwise false.</returns>
-    bool TryConstructTableInfo(RuntimeTypeHandle handle, void* ptr, out TableInfo info);
+    TableInfo ConstructTableInfo(RuntimeTypeHandle handle, IUnknownDerivedDetails interfaceDetails, void* ptr);
 
     /// <summary>
     /// Get associated <see cref="TableInfo"/>.
@@ -152,8 +153,9 @@ public unsafe interface IIUnknownCacheStrategy
 
 public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider<InterfaceId>
 {
-    protected ComObject(IIUnknownStrategy iunknownStrategy, IIUnknownCacheStrategy cacheStrategy)
+    protected ComObject(IIUnknownInterfaceDetailsStrategy interfaceDetailsStrategy, IIUnknownStrategy iunknownStrategy, IIUnknownCacheStrategy cacheStrategy)
     {
+        InterfaceDetailsStrategy = interfaceDetailsStrategy;
         IUnknownStrategy = iunknownStrategy;
         CacheStrategy = cacheStrategy;
     }
@@ -165,6 +167,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
     }
 
     protected void* ThisPtr { get; init; }
+    protected IIUnknownInterfaceDetailsStrategy InterfaceDetailsStrategy { get; init; }
     protected IIUnknownStrategy IUnknownStrategy { get; init; }
     protected IIUnknownCacheStrategy CacheStrategy { get; init; }
 
@@ -195,17 +198,19 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
         qiHResult = 0;
         if (!CacheStrategy.TryGetTableInfo(handle, out result))
         {
-            int hr = IUnknownStrategy.QueryInterface(ThisPtr, handle, out void* ppv);
+            IUnknownDerivedDetails? details = InterfaceDetailsStrategy.GetIUnknownDerivedDetails(handle);
+            if (details is null)
+            {
+                return false;
+            }
+            int hr = IUnknownStrategy.QueryInterface(ThisPtr, details.Iid, out void* ppv);
             if (hr < 0)
             {
                 qiHResult = hr;
                 return false;
             }
 
-            if (!CacheStrategy.TryConstructTableInfo(handle, ppv, out result))
-            {
-                return false;
-            }
+            result = CacheStrategy.ConstructTableInfo(handle, details, ppv);
 
             // Update some local cache. If the update fails, we lost the race and
             // then are responsible for calling Release().
@@ -222,8 +227,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
 
     VirtualMethodTableInfo IUnmanagedVirtualMethodTableProvider<InterfaceId>.GetVirtualMethodTableInfoForKey(InterfaceId typeKey, Type type)
     {
-        IIUnknownCacheStrategy.TableInfo result;
-        if (!LookUpVTableInfo(type.TypeHandle, out result, out int qiHResult))
+        if (!LookUpVTableInfo(type.TypeHandle, out IIUnknownCacheStrategy.TableInfo result, out int qiHResult))
         {
             Marshal.ThrowExceptionForHR(qiHResult);
         }
@@ -242,33 +246,79 @@ public abstract class GeneratedComWrappersBase<TComObject> : ComWrappers
 }
 #endregion COM layer
 
-#region Generated
-// Generated base for v1.0 supported runtime scenarios.
-// No thread-affinity aware support.
-// No IDispatch support.
-// No aggregation support.
-//
-// This would be generated for a set of "version bubbled" COM runtime wrappers, RCWs.
-internal unsafe class MyComObjectBase : ComObject
+#region Common Stragety Implementations
+
+public sealed class DefaultIUnknownInterfaceDetailsStrategy : IIUnknownInterfaceDetailsStrategy
 {
-    internal MyComObjectBase(void* thisPtr)
-        : base(FreeThreadedStrategy.Instance, new DefaultCaching())
+    public static readonly IIUnknownInterfaceDetailsStrategy Instance = new DefaultIUnknownInterfaceDetailsStrategy();
+
+    public IUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type)
     {
-        // Implementers can, at this point, capture the current thread
-        // context and create a proxy for apartment marshalling. The options
-        // are to use RoGetAgileReference() on Win 8.1+ or the Global Interface Table (GIT)
-        // on pre-Win 8.1.
-        //
-        // Relevant APIs:
-        //  - RoGetAgileReference() - modern way to create apartment proxies
-        //  - IGlobalInterfaceTable - GIT interface that helps with proxy management
-        //  - CoGetContextToken()   - Low level mechanism for tracking object's apartment context
-        //
-        // Once the decision has been made to create a proxy (i.e., not free threaded) the
-        // implementer should set the instance pointer.
-        ThisPtr = thisPtr;
+        return IUnknownDerivedDetails.GetFromAttribute(type);
     }
 }
+
+public sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
+{
+    public static readonly IIUnknownStrategy Instance = new FreeThreadedStrategy();
+
+    unsafe int IIUnknownStrategy.QueryInterface(void* thisPtr, in Guid handle, out void* ppObj)
+    {
+        int hr = Marshal.QueryInterface((nint)thisPtr, ref Unsafe.AsRef(in handle), out nint ppv);
+        if (hr < 0)
+        {
+            ppObj = null;
+        }
+        else
+        {
+            ppObj = (void*)ppv;
+        }
+        return hr;
+    }
+
+    unsafe int IIUnknownStrategy.Release(void* thisPtr)
+        => Marshal.Release((nint)thisPtr);
+}
+
+public sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
+{
+    // [TODO] Implement some smart/thread-safe caching
+    private readonly Dictionary<RuntimeTypeHandle, IIUnknownCacheStrategy.TableInfo> _cache = new();
+
+    IIUnknownCacheStrategy.TableInfo IIUnknownCacheStrategy.ConstructTableInfo(RuntimeTypeHandle handle, IUnknownDerivedDetails details, void* ptr)
+    {
+        var obj = (void***)ptr;
+        return new IIUnknownCacheStrategy.TableInfo()
+        {
+            ThisPtr = obj,
+            Table = *obj,
+            TableLength = details.VTableTotalLength,
+            ManagedType = details.Implementation.TypeHandle
+        };
+    }
+
+    bool IIUnknownCacheStrategy.TryGetTableInfo(RuntimeTypeHandle handle, out IIUnknownCacheStrategy.TableInfo info)
+    {
+        return _cache.TryGetValue(handle, out info);
+    }
+
+    bool IIUnknownCacheStrategy.TrySetTableInfo(RuntimeTypeHandle handle, IIUnknownCacheStrategy.TableInfo info)
+    {
+        return _cache.TryAdd(handle, info);
+    }
+
+    void IIUnknownCacheStrategy.Clear(IIUnknownStrategy unknownStrategy)
+    {
+        foreach (var info in _cache.Values)
+        {
+            _ = unknownStrategy.Release(info.ThisPtr);
+        }
+        _cache.Clear();
+    }
+}
+#endregion
+
+#region Generated
 
 internal sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObjectBase>
 {
@@ -320,80 +370,6 @@ internal sealed unsafe class MyDisposableComObject : MyComObjectBase, IDisposabl
     }
 }
 
-internal sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
-{
-    public static readonly IIUnknownStrategy Instance = new FreeThreadedStrategy();
-
-    unsafe int IIUnknownStrategy.QueryInterface(void* thisPtr, RuntimeTypeHandle handle, out void* ppObj)
-    {
-        if (!IUnknownDerivedDetails.TryGet(handle, out IUnknownDerivedDetails? details))
-        {
-            ppObj = null;
-            return -1; // [TODO] What is the HRESULT here?
-        }
-
-        Guid iid = details.Iid;
-        int hr = Marshal.QueryInterface((nint)thisPtr, ref iid, out nint ppv);
-        if (hr < 0)
-        {
-            ppObj = null;
-        }
-        else
-        {
-            ppObj = (void*)ppv;
-        }
-        return hr;
-    }
-
-    unsafe int IIUnknownStrategy.Release(void* thisPtr)
-        => Marshal.Release((nint)thisPtr);
-}
-
-internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
-{
-    // [TODO] Implement some smart/thread-safe caching
-    private Dictionary<RuntimeTypeHandle, IIUnknownCacheStrategy.TableInfo> _cache = new();
-
-    bool IIUnknownCacheStrategy.TryConstructTableInfo(RuntimeTypeHandle handle, void* ptr, out IIUnknownCacheStrategy.TableInfo info)
-    {
-        if (!IUnknownDerivedDetails.TryGet(handle, out IUnknownDerivedDetails? details))
-        {
-            info = default;
-            return false;
-        }
-
-        var obj = (void***)ptr;
-        info = new IIUnknownCacheStrategy.TableInfo()
-        {
-            ThisPtr = obj,
-            Table = *obj,
-            TableLength = details.VTableTotalLength,
-            ManagedType = details.Implementation.TypeHandle
-        };
-
-        return true;
-    }
-
-    bool IIUnknownCacheStrategy.TryGetTableInfo(RuntimeTypeHandle handle, out IIUnknownCacheStrategy.TableInfo info)
-    {
-        return _cache.TryGetValue(handle, out info);
-    }
-
-    bool IIUnknownCacheStrategy.TrySetTableInfo(RuntimeTypeHandle handle, IIUnknownCacheStrategy.TableInfo info)
-    {
-        return _cache.TryAdd(handle, info);
-    }
-
-    void IIUnknownCacheStrategy.Clear(IIUnknownStrategy unknownStrategy)
-    {
-        foreach (var info in _cache.Values)
-        {
-            _ = unknownStrategy.Release(info.ThisPtr);
-        }
-        _cache.Clear();
-    }
-}
-
 internal static class ComProxies
 {
     // Note: the first integer must be encoded in little endian form.
@@ -408,11 +384,11 @@ internal static class ComProxies
     };
 }
 
-[IUnknownDerived<IComInterface1>(4)]
+[IUnknownDerived<IComInterface1, Impl>]
 public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(0 * 16, 16)));
-    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
+    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface1
@@ -432,11 +408,11 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
     }
 }
 
-[IUnknownDerived<IComInterface2>(5)]
+[IUnknownDerived<IComInterface2, Impl>]
 public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(1 * 16, 16)));
-    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
+    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 5;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface2
@@ -468,11 +444,12 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
     }
 }
 
-[IUnknownDerived<IComInterface3>(4)]
+[IUnknownDerived<IComInterface3, Impl>]
 public partial interface IComInterface3 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(2 * 16, 16)));
-    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
+
+    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface3
@@ -511,6 +488,29 @@ public partial interface IComInterface2
 public partial interface IComInterface3
 {
     void Method();
+}
+
+// User-defined implementation of ComObject that provides the requested strategy implementations.
+// This type will be provided to the source generator through the GeneratedComInterface attribute.
+internal unsafe class MyComObjectBase : ComObject
+{
+    internal MyComObjectBase(void* thisPtr)
+        : base(DefaultIUnknownInterfaceDetailsStrategy.Instance, FreeThreadedStrategy.Instance, new DefaultCaching())
+    {
+        // Implementers can, at this point, capture the current thread
+        // context and create a proxy for apartment marshalling. The options
+        // are to use RoGetAgileReference() on Win 8.1+ or the Global Interface Table (GIT)
+        // on pre-Win 8.1.
+        //
+        // Relevant APIs:
+        //  - RoGetAgileReference() - modern way to create apartment proxies
+        //  - IGlobalInterfaceTable - GIT interface that helps with proxy management
+        //  - CoGetContextToken()   - Low level mechanism for tracking object's apartment context
+        //
+        // Once the decision has been made to create a proxy (i.e., not free threaded) the
+        // implementer should set the instance pointer.
+        ThisPtr = thisPtr;
+    }
 }
 #endregion User defined
 
