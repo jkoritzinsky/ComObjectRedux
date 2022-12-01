@@ -412,7 +412,7 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
 public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(1 * 16, 16)));
-    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
+    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 5;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface2
