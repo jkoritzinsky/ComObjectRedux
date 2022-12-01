@@ -38,7 +38,8 @@ public interface IUnmanagedVirtualMethodTableProvider<T> where T : IEquatable<T>
 public interface IUnmanagedInterfaceType<T> where T : IEquatable<T>
 {
     public abstract static T TypeKey { get; }
-    public abstract static Type ManagedProjection { get; }
+
+    public abstract static int VTableLength { get; }
 }
 #endregion Base impl
 
@@ -60,7 +61,7 @@ interface IUnknownDerivedDetails
         }
         else
         {
-            details = (IUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<>));
+            details = (IUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<,>));
         }
 
         return details is not null;
@@ -68,17 +69,17 @@ interface IUnknownDerivedDetails
 }
 
 [AttributeUsage(AttributeTargets.Interface)]
-public class IUnknownDerivedAttribute<T> : Attribute, IUnknownDerivedDetails
+public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDetails
     where T : IUnmanagedInterfaceType<InterfaceId>
+    where TImpl : T
 {
-    public IUnknownDerivedAttribute(int vtableTotalLength)
+    public IUnknownDerivedAttribute()
     {
-        VTableTotalLength = vtableTotalLength;
     }
 
     public Guid Iid => T.TypeKey.Iid;
-    public Type Implementation => T.ManagedProjection;
-    public int VTableTotalLength { get; init; }
+    public Type Implementation => typeof(TImpl);
+    public int VTableTotalLength => T.VTableLength;
 }
 
 /// <summary>
@@ -243,32 +244,6 @@ public abstract class GeneratedComWrappersBase<TComObject> : ComWrappers
 #endregion COM layer
 
 #region Generated
-// Generated base for v1.0 supported runtime scenarios.
-// No thread-affinity aware support.
-// No IDispatch support.
-// No aggregation support.
-//
-// This would be generated for a set of "version bubbled" COM runtime wrappers, RCWs.
-internal unsafe class MyComObjectBase : ComObject
-{
-    internal MyComObjectBase(void* thisPtr)
-        : base(FreeThreadedStrategy.Instance, new DefaultCaching())
-    {
-        // Implementers can, at this point, capture the current thread
-        // context and create a proxy for apartment marshalling. The options
-        // are to use RoGetAgileReference() on Win 8.1+ or the Global Interface Table (GIT)
-        // on pre-Win 8.1.
-        //
-        // Relevant APIs:
-        //  - RoGetAgileReference() - modern way to create apartment proxies
-        //  - IGlobalInterfaceTable - GIT interface that helps with proxy management
-        //  - CoGetContextToken()   - Low level mechanism for tracking object's apartment context
-        //
-        // Once the decision has been made to create a proxy (i.e., not free threaded) the
-        // implementer should set the instance pointer.
-        ThisPtr = thisPtr;
-    }
-}
 
 internal sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObjectBase>
 {
@@ -408,11 +383,11 @@ internal static class ComProxies
     };
 }
 
-[IUnknownDerived<IComInterface1>(4)]
+[IUnknownDerived<IComInterface1, Impl>]
 public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(0 * 16, 16)));
-    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
+    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface1
@@ -432,11 +407,11 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
     }
 }
 
-[IUnknownDerived<IComInterface2>(5)]
+[IUnknownDerived<IComInterface2, Impl>]
 public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(1 * 16, 16)));
-    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
+    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface2
@@ -468,11 +443,12 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
     }
 }
 
-[IUnknownDerived<IComInterface3>(4)]
+[IUnknownDerived<IComInterface3, Impl>]
 public partial interface IComInterface3 : IUnmanagedInterfaceType<InterfaceId>
 {
     static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid(ComProxies.Iids.Slice(2 * 16, 16)));
-    static Type IUnmanagedInterfaceType<InterfaceId>.ManagedProjection => typeof(Impl);
+
+    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface3
@@ -511,6 +487,29 @@ public partial interface IComInterface2
 public partial interface IComInterface3
 {
     void Method();
+}
+
+// User-defined implementation of ComObject that provides the requested strategy implementations.
+// This type will be provided to the source generator through the GeneratedComInterface attribute.
+internal unsafe class MyComObjectBase : ComObject
+{
+    internal MyComObjectBase(void* thisPtr)
+        : base(FreeThreadedStrategy.Instance, new DefaultCaching())
+    {
+        // Implementers can, at this point, capture the current thread
+        // context and create a proxy for apartment marshalling. The options
+        // are to use RoGetAgileReference() on Win 8.1+ or the Global Interface Table (GIT)
+        // on pre-Win 8.1.
+        //
+        // Relevant APIs:
+        //  - RoGetAgileReference() - modern way to create apartment proxies
+        //  - IGlobalInterfaceTable - GIT interface that helps with proxy management
+        //  - CoGetContextToken()   - Low level mechanism for tracking object's apartment context
+        //
+        // Once the decision has been made to create a proxy (i.e., not free threaded) the
+        // implementer should set the instance pointer.
+        ThisPtr = thisPtr;
+    }
 }
 #endregion User defined
 
