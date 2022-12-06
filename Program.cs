@@ -50,12 +50,24 @@ public interface IComInterfaceType
 #endregion Base impl
 
 #region COM layer
-public readonly record struct InterfaceId(Guid Iid);
-
+/// <summary>
+/// Details for the IUnknown derived interface.
+/// </summary>
 public interface IUnknownDerivedDetails
 {
+    /// <summary>
+    /// Interface ID.
+    /// </summary>
     public Guid Iid { get; }
+
+    /// <summary>
+    /// Managed typed used to project the IUnknown derived interface.
+    /// </summary>
     public Type Implementation { get; }
+
+    /// <summary>
+    /// Total length of the vtable.
+    /// </summary>
     public int VTableTotalLength { get; }
 
     internal static IUnknownDerivedDetails? GetFromAttribute(RuntimeTypeHandle handle)
@@ -69,6 +81,11 @@ public interface IUnknownDerivedDetails
     }
 }
 
+/// <summary>
+/// Attribute used to indicate an interface derives from IUnknown.
+/// </summary>
+/// <typeparam name="T">The managed definition of the derived interface.</typeparam>
+/// <typeparam name="TImpl">The managed implementation of the derived interface.</typeparam>
 [AttributeUsage(AttributeTargets.Interface)]
 public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDetails
     where T : IUnmanagedInterfaceType, IComInterfaceType
@@ -78,8 +95,13 @@ public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDeta
     {
     }
 
+    /// <inheritdoc />
     public Guid Iid => T.Iid;
+
+    /// <inheritdoc />
     public Type Implementation => typeof(TImpl);
+
+    /// <inheritdoc />
     public int VTableTotalLength => T.VTableLength;
 }
 
@@ -107,9 +129,17 @@ public unsafe interface IIUnknownStrategy
     public int Release(void* thisPtr);
 }
 
-public unsafe interface IIUnknownInterfaceDetailsStrategy
+/// <summary>
+/// Strategy for acquiring interface details.
+/// </summary>
+public interface IIUnknownInterfaceDetailsStrategy
 {
-     IUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type);
+    /// <summary>
+    /// Given a <see cref="RuntimeTypeHandle"/> get the IUnknown details.
+    /// </summary>
+    /// <param name="type">RuntimeTypeHandle instance</param>
+    /// <returns>Details if type is known.</returns>
+    IUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type);
 }
 
 /// <summary>
@@ -157,8 +187,17 @@ public unsafe interface IIUnknownCacheStrategy
     void Clear(IIUnknownStrategy unknownStrategy);
 }
 
+/// <summary>
+/// Base class for all COM source generated Runtime Callable Wrapper (RCWs).
+/// </summary>
 public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider
 {
+    /// <summary>
+    /// Initialize ComObject instance.
+    /// </summary>
+    /// <param name="interfaceDetailsStrategy">Strategy for getting details</param>
+    /// <param name="iunknownStrategy">Interaction strategy for IUnknown</param>
+    /// <param name="cacheStrategy">Caching strategy</param>
     protected ComObject(IIUnknownInterfaceDetailsStrategy interfaceDetailsStrategy, IIUnknownStrategy iunknownStrategy, IIUnknownCacheStrategy cacheStrategy)
     {
         InterfaceDetailsStrategy = interfaceDetailsStrategy;
@@ -172,11 +211,27 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
         IUnknownStrategy.Release(ThisPtr);
     }
 
+    /// <summary>
+    /// Pointer to the unmanaged instance.
+    /// </summary>
     protected void* ThisPtr { get; init; }
+
+    /// <summary>
+    /// Interface details strategy.
+    /// </summary>
     protected IIUnknownInterfaceDetailsStrategy InterfaceDetailsStrategy { get; init; }
+
+    /// <summary>
+    /// IUnknown interaction strategy.
+    /// </summary>
     protected IIUnknownStrategy IUnknownStrategy { get; init; }
+
+    /// <summary>
+    /// Caching strategy.
+    /// </summary>
     protected IIUnknownCacheStrategy CacheStrategy { get; init; }
 
+    /// <inheritdoc />
     RuntimeTypeHandle IDynamicInterfaceCastable.GetInterfaceImplementation(RuntimeTypeHandle interfaceType)
     {
         if (!LookUpVTableInfo(interfaceType, out IIUnknownCacheStrategy.TableInfo info, out int qiResult))
@@ -186,6 +241,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
         return info.ManagedType;
     }
 
+    /// <inheritdoc />
     bool IDynamicInterfaceCastable.IsInterfaceImplemented(RuntimeTypeHandle interfaceType, bool throwIfNotImplemented)
     {
         if (!LookUpVTableInfo(interfaceType, out _, out int qiResult))
@@ -231,6 +287,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
         return true;
     }
 
+    /// <inheritdoc />
     VirtualMethodTableInfo IUnmanagedVirtualMethodTableProvider.GetVirtualMethodTableInfoForKey(Type type)
     {
         if (!LookUpVTableInfo(type.TypeHandle, out IIUnknownCacheStrategy.TableInfo result, out int qiHResult))
@@ -240,7 +297,6 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
 
         return new((nint)result.ThisPtr, new ReadOnlySpan<nint>(result.Table, result.TableLength));
     }
-
 }
 
 public abstract class GeneratedComWrappersBase<TComObject> : ComWrappers
@@ -376,24 +432,10 @@ internal sealed unsafe class MyDisposableComObject : MyComObjectBase, IDisposabl
     }
 }
 
-internal static class ComProxies
-{
-    // Note: the first integer must be encoded in little endian form.
-    public static ReadOnlySpan<byte> Iids => new byte[]
-    {
-        // 2c3f9903-b586-46b1-881b-adfce9af47b1
-        0x03, 0x99, 0x3f, 0x2c, 0xb5, 0x86, 0x46, 0xb1, 0x88, 0x1b, 0xad, 0xfc, 0xe9, 0xaf, 0x47, 0xb1,
-        // 2c3f9903-b586-46b1-881b-adfce9af47b2
-        0x03, 0x99, 0x3f, 0x2c, 0xb5, 0x86, 0x46, 0xb1, 0x88, 0x1b, 0xad, 0xfc, 0xe9, 0xaf, 0x47, 0xb2,
-        // 2c3f9903-b586-46b1-881b-adfce9af47b3
-        0x03, 0x99, 0x3f, 0x2c, 0xb5, 0x86, 0x46, 0xb1, 0x88, 0x1b, 0xad, 0xfc, 0xe9, 0xaf, 0x47, 0xb3,
-    };
-}
-
 [IUnknownDerived<IComInterface1, Impl>]
 public partial interface IComInterface1 : IUnmanagedInterfaceType, IComInterfaceType
 {
-    static Guid IComInterfaceType.Iid => new Guid(ComProxies.Iids.Slice(0 * 16, 16));
+    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1");
     static int IUnmanagedInterfaceType.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
@@ -417,7 +459,7 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType, IComInterface
 [IUnknownDerived<IComInterface2, Impl>]
 public partial interface IComInterface2 : IUnmanagedInterfaceType, IComInterfaceType
 {
-    static Guid IComInterfaceType.Iid => new Guid(ComProxies.Iids.Slice(1 * 16, 16));
+    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2");
     static int IUnmanagedInterfaceType.VTableLength => 5;
 
     [DynamicInterfaceCastableImplementation]
@@ -453,7 +495,7 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType, IComInterface
 [IUnknownDerived<IComInterface3, Impl>]
 public partial interface IComInterface3 : IUnmanagedInterfaceType, IComInterfaceType
 {
-    static Guid IComInterfaceType.Iid => new Guid(ComProxies.Iids.Slice(2 * 16, 16));
+    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3");
 
     static int IUnmanagedInterfaceType.VTableLength => 4;
 
