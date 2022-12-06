@@ -43,7 +43,7 @@ public interface IUnmanagedInterfaceType
     public abstract static int VTableLength { get; }
 }
 
-public interface IComInterfaceType
+public interface IIUnknownInterfaceType
 {
     public abstract static Guid Iid { get; }
 }
@@ -88,7 +88,7 @@ public interface IUnknownDerivedDetails
 /// <typeparam name="TImpl">The managed implementation of the derived interface.</typeparam>
 [AttributeUsage(AttributeTargets.Interface)]
 public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDetails
-    where T : IUnmanagedInterfaceType, IComInterfaceType
+    where T : IUnmanagedInterfaceType, IIUnknownInterfaceType
     where TImpl : T
 {
     public IUnknownDerivedAttribute()
@@ -433,9 +433,9 @@ internal sealed unsafe class MyDisposableComObject : MyComObjectBase, IDisposabl
 }
 
 [IUnknownDerived<IComInterface1, Impl>]
-public partial interface IComInterface1 : IUnmanagedInterfaceType, IComInterfaceType
+public partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
-    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1");
+    static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1");
     static int IUnmanagedInterfaceType.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
@@ -457,9 +457,9 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType, IComInterface
 }
 
 [IUnknownDerived<IComInterface2, Impl>]
-public partial interface IComInterface2 : IUnmanagedInterfaceType, IComInterfaceType
+public partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
-    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2");
+    static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2");
     static int IUnmanagedInterfaceType.VTableLength => 5;
 
     [DynamicInterfaceCastableImplementation]
@@ -493,9 +493,9 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType, IComInterface
 }
 
 [IUnknownDerived<IComInterface3, Impl>]
-public partial interface IComInterface3 : IUnmanagedInterfaceType, IComInterfaceType
+public partial interface IComInterface3 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
-    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3");
+    static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3");
 
     static int IUnmanagedInterfaceType.VTableLength => 4;
 
@@ -643,7 +643,7 @@ public unsafe class Program
         return 0;
 
         static Guid GetTypeKey<T>()
-            where T : IComInterfaceType
+            where T : IIUnknownInterfaceType
         {
             return T.Iid;
         }
