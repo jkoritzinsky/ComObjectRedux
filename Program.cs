@@ -23,32 +23,33 @@ public readonly ref struct VirtualMethodTableInfo
     }
 }
 
-public interface IUnmanagedVirtualMethodTableProvider<T> where T : IEquatable<T>
+public interface IUnmanagedVirtualMethodTableProvider
 {
-    protected VirtualMethodTableInfo GetVirtualMethodTableInfoForKey(T typeKey, Type t);
+    // Forward from a generic non-virtual to a non-generic virtual as lookup
+    // for interface information can go through generic attributes like we do below for COM
+    // for whatever information is required for the domain-specific implementation
+    // and generic virtual method dispatch can be extremely slow.
+    protected VirtualMethodTableInfo GetVirtualMethodTableInfoForKey(Type t);
 
     public sealed VirtualMethodTableInfo GetVirtualMethodTableInfoForKey<TUnmanagedInterfaceType>()
-        where TUnmanagedInterfaceType : IUnmanagedInterfaceType<T>
+        where TUnmanagedInterfaceType : IUnmanagedInterfaceType
     {
-        return GetVirtualMethodTableInfoForKey(TUnmanagedInterfaceType.TypeKey, typeof(TUnmanagedInterfaceType));
+        return GetVirtualMethodTableInfoForKey(typeof(TUnmanagedInterfaceType));
     }
 }
 
-public interface IUnmanagedInterfaceType<T> where T : IEquatable<T>
+public interface IUnmanagedInterfaceType
 {
-    public abstract static T TypeKey { get; }
-
     public abstract static int VTableLength { get; }
+}
+
+public interface IComInterfaceType
+{
+    public abstract static Guid Iid { get; }
 }
 #endregion Base impl
 
 #region COM layer
-/// <summary>
-/// Type used to uniquely identify a COM interface.
-/// </summary>
-/// <param name="Iid">Interface ID</param>
-public readonly record struct InterfaceId(Guid Iid);
-
 /// <summary>
 /// Details for the IUnknown derived interface.
 /// </summary>
@@ -87,7 +88,7 @@ public interface IUnknownDerivedDetails
 /// <typeparam name="TImpl">The managed implementation of the derived interface.</typeparam>
 [AttributeUsage(AttributeTargets.Interface)]
 public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDetails
-    where T : IUnmanagedInterfaceType<InterfaceId>
+    where T : IUnmanagedInterfaceType, IComInterfaceType
     where TImpl : T
 {
     public IUnknownDerivedAttribute()
@@ -95,7 +96,7 @@ public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDeta
     }
 
     /// <inheritdoc />
-    public Guid Iid => T.TypeKey.Iid;
+    public Guid Iid => T.Iid;
 
     /// <inheritdoc />
     public Type Implementation => typeof(TImpl);
@@ -189,7 +190,7 @@ public unsafe interface IIUnknownCacheStrategy
 /// <summary>
 /// Base class for all COM source generated Runtime Callable Wrapper (RCWs).
 /// </summary>
-public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider<InterfaceId>
+public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider
 {
     /// <summary>
     /// Initialize ComObject instance.
@@ -287,7 +288,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
     }
 
     /// <inheritdoc />
-    VirtualMethodTableInfo IUnmanagedVirtualMethodTableProvider<InterfaceId>.GetVirtualMethodTableInfoForKey(InterfaceId typeKey, Type type)
+    VirtualMethodTableInfo IUnmanagedVirtualMethodTableProvider.GetVirtualMethodTableInfoForKey(Type type)
     {
         if (!LookUpVTableInfo(type.TypeHandle, out IIUnknownCacheStrategy.TableInfo result, out int qiHResult))
         {
@@ -432,10 +433,10 @@ internal sealed unsafe class MyDisposableComObject : MyComObjectBase, IDisposabl
 }
 
 [IUnknownDerived<IComInterface1, Impl>]
-public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
+public partial interface IComInterface1 : IUnmanagedInterfaceType, IComInterfaceType
 {
-    static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1"));
-    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
+    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1");
+    static int IUnmanagedInterfaceType.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface1
@@ -444,7 +445,7 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
         {
             unsafe
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface1>();
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface1>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
@@ -456,10 +457,10 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<InterfaceId>
 }
 
 [IUnknownDerived<IComInterface2, Impl>]
-public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
+public partial interface IComInterface2 : IUnmanagedInterfaceType, IComInterfaceType
 {
-    static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2"));
-    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 5;
+    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2");
+    static int IUnmanagedInterfaceType.VTableLength => 5;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface2
@@ -468,7 +469,7 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
         {
             unsafe
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
@@ -480,7 +481,7 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
         {
             unsafe
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[4])(thisPtr);
                 if (hr < 0)
                 {
@@ -492,11 +493,11 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<InterfaceId>
 }
 
 [IUnknownDerived<IComInterface3, Impl>]
-public partial interface IComInterface3 : IUnmanagedInterfaceType<InterfaceId>
+public partial interface IComInterface3 : IUnmanagedInterfaceType, IComInterfaceType
 {
-    static InterfaceId IUnmanagedInterfaceType<InterfaceId>.TypeKey => new(new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3"));
+    static Guid IComInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3");
 
-    static int IUnmanagedInterfaceType<InterfaceId>.VTableLength => 4;
+    static int IUnmanagedInterfaceType.VTableLength => 4;
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface3
@@ -505,7 +506,7 @@ public partial interface IComInterface3 : IUnmanagedInterfaceType<InterfaceId>
         {
             unsafe
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider<InterfaceId>)this).GetVirtualMethodTableInfoForKey<IComInterface3>();
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface3>();
                 int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
@@ -642,9 +643,9 @@ public unsafe class Program
         return 0;
 
         static Guid GetTypeKey<T>()
-            where T : IUnmanagedInterfaceType<InterfaceId>
+            where T : IComInterfaceType
         {
-            return T.TypeKey.Iid;
+            return T.Iid;
         }
     }
 
