@@ -231,6 +231,16 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
     /// </summary>
     protected IIUnknownCacheStrategy CacheStrategy { get; init; }
 
+    /// <summary>
+    /// Returns an IDisposable that can be used to perform a final release
+    /// on this COM object wrapper.
+    /// </summary>
+    /// <remarks>
+    /// This property will only be non-null if the ComObject was created using
+    /// CreateObjectFlags.UniqueInstance.
+    /// </remarks>
+    public IDisposable? FinalRelease { get; }
+
     /// <inheritdoc />
     RuntimeTypeHandle IDynamicInterfaceCastable.GetInterfaceImplementation(RuntimeTypeHandle interfaceType)
     {
@@ -382,7 +392,7 @@ public sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
 
 #region Generated
 
-internal sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObjectBase>
+internal sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObject>
 {
     protected override unsafe ComInterfaceEntry* ComputeVtables(object obj, CreateComInterfaceFlags flags, out int count)
         => throw new NotImplementedException();
@@ -394,41 +404,15 @@ internal sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObj
         {
             throw new NotSupportedException();
         }
-        return flags.HasFlag(CreateObjectFlags.UniqueInstance)
-            ? new MyDisposableComObject((void*)externalComObject)
-            : new MyComObject((void*)externalComObject);
-    }
-}
 
-// Minimal implementation for all IUnknown based scenarios.
-internal sealed unsafe class MyComObject : MyComObjectBase
-{
-    internal MyComObject(void* thisPtr)
-        : base(thisPtr)
-    {
-    }
-}
-
-// Minimal implementation for all "unique instance" scenarios,
-// that are capable of supporting the IDisposable pattern.
-internal sealed unsafe class MyDisposableComObject : MyComObjectBase, IDisposable
-{
-    private bool _isDisposed = false;
-
-    internal MyDisposableComObject(void* thisPtr)
-        : base(thisPtr)
-    { }
-
-    void IDisposable.Dispose()
-    {
-        if (_isDisposed)
+        var rcw = new MyComObject((void*)externalComObject);
+        if (flags.HasFlag(CreateObjectFlags.UniqueInstance))
         {
-            return;
+            // Set value on MyComObject to enable the FinalRelease option.
+            // This could also be achieved through an internal factory
+            // function on ComObject type.
         }
-        CacheStrategy.Clear(IUnknownStrategy);
-        IUnknownStrategy.Release(ThisPtr);
-        GC.SuppressFinalize(this);
-        _isDisposed = true;
+        return rcw;
     }
 }
 
@@ -540,9 +524,9 @@ public partial interface IComInterface3
 
 // User-defined implementation of ComObject that provides the requested strategy implementations.
 // This type will be provided to the source generator through the GeneratedComInterface attribute.
-internal unsafe class MyComObjectBase : ComObject
+internal unsafe class MyComObject : ComObject
 {
-    internal MyComObjectBase(void* thisPtr)
+    internal MyComObject(void* thisPtr)
         : base(DefaultIUnknownInterfaceDetailsStrategy.Instance, FreeThreadedStrategy.Instance, new DefaultCaching())
     {
         // Implementers can, at this point, capture the current thread
