@@ -76,11 +76,7 @@ public unsafe interface IUnmanagedObjectWrapperFactory
 /// <summary>
 /// This interface allows another interface to define that it represents a manavged projection of an unmanaged interface from some unmanaged type system and supports passing managed implementations of unmanaged interfaces to unmanaged code.
 /// </summary>
-/// <typeparam name="TInterface">The managed interface.</typeparam>
-/// <typeparam name="TUnmanagedObjectWrapperFactory">The factory to create an unmanaged "this pointer" from a managed object and to get a managed object from an unmanaged "this pointer".</typeparam>
-public unsafe interface IUnmanagedInterfaceType<TInterface, TUnmanagedObjectWrapperFactory>
-    where TInterface : IUnmanagedInterfaceType<TInterface, TUnmanagedObjectWrapperFactory>
-    where TUnmanagedObjectWrapperFactory: IUnmanagedObjectWrapperFactory, new()
+public unsafe interface IUnmanagedInterfaceType
 {
     /// <summary>
     /// Get a pointer to the virtual method table of managed implementations of the unmanaged interface type.
@@ -88,21 +84,8 @@ public unsafe interface IUnmanagedInterfaceType<TInterface, TUnmanagedObjectWrap
     /// <returns>A pointer to the virtual method table of managed implementations of the unmanaged interface type</returns>
     /// <remarks>TODO: Source generated</remarks>
     public abstract static void* VirtualMethodTableManagedImplementation { get; }
-
-    /// <summary>
-    /// Get a pointer that wraps a managed implementation of an unmanaged interface that can be passed to unmanaged code.
-    /// </summary>
-    /// <param name="obj">The managed object that implements the unmanaged interface.</param>
-    /// <returns>A unmanaged "this pointer" that can be passed to unmanaged code that represents <paramref name="obj"/></returns>
-    public static void* GetUnmanagedWrapperForObject(TInterface obj) { return TUnmanagedObjectWrapperFactory.GetUnmanagedWrapperForObject(obj); }
-
-    /// <summary>
-    /// Get the object wrapped by <paramref name="ptr"/>.
-    /// </summary>
-    /// <param name="ptr">A an unmanaged "this pointer".</param>
-    /// <returns>The object wrapped by <paramref name="ptr"/>.</returns>
-    public static TInterface GetObjectForUnmanagedWrapper(void* ptr) { return (TInterface)TUnmanagedObjectWrapperFactory.GetObjectForUnmanagedWrapper(ptr); }
 }
+
 /// <summary>
 /// Marshals an exception object to the value of its <see cref="Exception.HResult"/> converted to <typeparamref name="T"/>.
 /// </summary>
@@ -191,4 +174,10 @@ public class VirtualMethodIndexAttribute : Attribute
     /// or must be set to <see cref="ExceptionMarshalling.Custom" />.
     /// </remarks>
     public Type? ExceptionMarshallingType { get; set; }
+}
+
+[AttributeUsage(AttributeTargets.Interface)]
+public class ObjectUnmanagedMapperAttribute<TMapper> : Attribute
+    where TMapper : IUnmanagedObjectWrapperFactory
+{
 }

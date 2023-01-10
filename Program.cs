@@ -19,10 +19,11 @@ public unsafe class Program
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void Run(void*[] instances)
         {
+            var comWrappers = new MyGeneratedComWrappers();
             for (int i = 0; i < instances.Length; ++i)
             {
                 Console.WriteLine($"=== Instance {i}");
-                var rcw = new MyComObject(instances[i]); // This would be replaced with a ComWrappers implementation.
+                var rcw = comWrappers.GetOrCreateObjectForComInstance((nint)instances[i], CreateObjectFlags.None);
                 InspectObject(rcw);
                 InspectObject(rcw);
             }
@@ -48,8 +49,8 @@ public unsafe class Program
     }
 
 #region Unmanaged code region
-    static readonly void*[] tables = new void*[3];
-    static readonly void*[] impls = new void*[3];
+    static readonly void*[] tables = new void*[4];
+    static readonly void*[] impls = new void*[4];
 
     const nint SupportNone = 0;
     const nint SupportComInterface1 = 1;
@@ -60,17 +61,21 @@ public unsafe class Program
     static int QueryInterface(void* thisPtr, Guid* iid, void** ppObj)
     {
         var inst = new ReadOnlySpan<nint>(thisPtr, 2);
-        if (*iid == GetTypeKey<IComInterface1>() && (inst[1] & SupportComInterface1) != 0)
+        if (*iid == Guid.Parse("00000000-0000-0000-C000-000000000046"))
         {
             *ppObj = impls[0];
         }
-        else if (*iid == GetTypeKey<IComInterface2>() && (inst[1] & SupportComInterface2) != 0)
+        else if (*iid == GetTypeKey<IComInterface1>() && (inst[1] & SupportComInterface1) != 0)
         {
             *ppObj = impls[1];
         }
-        else if (*iid == GetTypeKey<IComInterface3>() && (inst[1] & SupportComInterface3) != 0)
+        else if (*iid == GetTypeKey<IComInterface2>() && (inst[1] & SupportComInterface2) != 0)
         {
             *ppObj = impls[2];
+        }
+        else if (*iid == GetTypeKey<IComInterface3>() && (inst[1] & SupportComInterface3) != 0)
+        {
+            *ppObj = impls[3];
         }
         else
         {
@@ -135,12 +140,19 @@ public unsafe class Program
     {
         void** table;
         {
+            table = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(Program), 3 * sizeof(void*));
+            table[0] = (delegate* unmanaged<void*, Guid*, void**, int>)&QueryInterface;
+            table[1] = (delegate* unmanaged<void*, uint>)&AddRef;
+            table[2] = (delegate* unmanaged<void*, uint>)&Release;
+            tables[0] = table;
+        }
+        {
             table = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(Program), 4 * sizeof(void*));
             table[0] = (delegate* unmanaged<void*, Guid*, void**, int>)&QueryInterface;
             table[1] = (delegate* unmanaged<void*, uint>)&AddRef;
             table[2] = (delegate* unmanaged<void*, uint>)&Release;
             table[3] = (delegate* unmanaged<void*, int>)&CI1_Method;
-            tables[0] = table;
+            tables[1] = table;
         }
         {
             table = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(Program), 5 * sizeof(void*));
@@ -149,7 +161,7 @@ public unsafe class Program
             table[2] = (delegate* unmanaged<void*, uint>)&Release;
             table[3] = (delegate* unmanaged<void*, int>)&CI2_Method1;
             table[4] = (delegate* unmanaged<void*, int>)&CI2_Method2;
-            tables[1] = table;
+            tables[2] = table;
         }
         {
             table = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(Program), 4 * sizeof(void*));
@@ -157,7 +169,7 @@ public unsafe class Program
             table[1] = (delegate* unmanaged<void*, uint>)&AddRef;
             table[2] = (delegate* unmanaged<void*, uint>)&Release;
             table[3] = (delegate* unmanaged<void*, int>)&CI3_Method;
-            tables[2] = table;
+            tables[3] = table;
         }
 
         // Build the instances

@@ -14,38 +14,20 @@ file abstract unsafe class IUnknownVTableComWrappers : ComWrappers
     }
 }
 
-public sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObject>
+internal sealed partial class MyGeneratedComWrappers : GeneratedComWrappersBase
 {
     protected override unsafe ComInterfaceEntry* ComputeVtables(object obj, CreateComInterfaceFlags flags, out int count)
         => throw new NotImplementedException();
-
-    protected override unsafe object CreateObject(nint externalComObject, CreateObjectFlags flags)
-    {
-        if (flags.HasFlag(CreateObjectFlags.TrackerObject)
-            || flags.HasFlag(CreateObjectFlags.Aggregation))
-        {
-            throw new NotSupportedException();
-        }
-
-        var rcw = new MyComObject((void*)externalComObject);
-        if (flags.HasFlag(CreateObjectFlags.UniqueInstance))
-        {
-            // Set value on MyComObject to enable the FinalRelease option.
-            // This could also be achieved through an internal factory
-            // function on ComObject type.
-        }
-        return rcw;
-    }
 }
 
 [IUnknownDerived<IComInterface1, Impl>]
-public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType<IComInterface1, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
+public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1");
 
-    private static void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 4);
+    private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 4);
 
-    static void* IUnmanagedInterfaceType<IComInterface1, ComWrappersWrapperFactory<MyGeneratedComWrappers>>.VirtualMethodTableManagedImplementation
+    static void* IUnmanagedInterfaceType.VirtualMethodTableManagedImplementation
     {
         get
         {
@@ -73,7 +55,7 @@ public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType<IComInt
             int retVal = 0;
             try
             {
-                IComInterface1 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface1 @this = (IComInterface1)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method();
             }
             catch (System.Exception ex)
@@ -96,13 +78,13 @@ public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType<IComInt
 }
 
 [IUnknownDerived<IComInterface2, Impl>]
-public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType<IComInterface2, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
+public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2");
 
-    private static void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 5);
+    private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 5);
 
-    static void* IUnmanagedInterfaceType<IComInterface2, ComWrappersWrapperFactory<MyGeneratedComWrappers>>.VirtualMethodTableManagedImplementation
+    static void* IUnmanagedInterfaceType.VirtualMethodTableManagedImplementation
     {
         get
         {
@@ -131,7 +113,7 @@ public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType<IComInt
             int retVal = 0;
             try
             {
-                IComInterface2 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface2 @this = (IComInterface2)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method1();
             }
             catch (System.Exception ex)
@@ -147,7 +129,7 @@ public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType<IComInt
             int retVal = 0;
             try
             {
-                IComInterface2 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface2 @this = (IComInterface2)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method2();
             }
             catch (System.Exception ex)
@@ -185,14 +167,14 @@ public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType<IComInt
 }
 
 [IUnknownDerived<IComInterface3, Impl>]
-public unsafe partial interface IComInterface3 : IUnmanagedInterfaceType<IComInterface3, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
+public unsafe partial interface IComInterface3 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3");
 
 
-    private static void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface3), sizeof(void*) * 4);
+    private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface3), sizeof(void*) * 4);
 
-    static void* IUnmanagedInterfaceType<IComInterface3, ComWrappersWrapperFactory<MyGeneratedComWrappers>>.VirtualMethodTableManagedImplementation
+    static void* IUnmanagedInterfaceType.VirtualMethodTableManagedImplementation
     {
         get
         {
@@ -220,7 +202,7 @@ public unsafe partial interface IComInterface3 : IUnmanagedInterfaceType<IComInt
             int retVal = 0;
             try
             {
-                IComInterface3 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface3 @this = (IComInterface3)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method();
             }
             catch (System.Exception ex)

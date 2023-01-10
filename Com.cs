@@ -73,22 +73,35 @@ public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDeta
 public unsafe interface IIUnknownStrategy
 {
     /// <summary>
-    /// Perform a QueryInterface() for an IID on the unmanaged IUnknown.
+    /// Create an instance pointer that represents the provided IUnknown instance.
     /// </summary>
-    /// <param name="thisPtr">The IUnknown instance.</param>
+    /// <param name="unknown">The IUnknown instance.</param>
+    /// <returns>A pointer representing the unmanaged instance.</returns>
+    /// <remarks>
+    /// This method is used to create an instance pointer that can be used to interact with the other members of this interface.
+    /// For example, this method can return an IAgileReference instance for the provided IUnknown instance
+    /// that can be used in the QueryInterface and Release methods to enable creating thread-local instance pointers to us
+    /// through the IAgileReference APIs instead of directly calling QueryInterface on the IUnknown.
+    /// </remarks>
+    public void* CreateInstancePointer(void* unknown);
+
+    /// <summary>
+    /// Perform a QueryInterface() for an IID on the unmanaged instance.
+    /// </summary>
+    /// <param name="instancePtr">A pointer representing the unmanaged instance.</param>
     /// <param name="iid">The IID (Interface ID) to query for.</param>
     /// <param name="ppObj">The resulting interface</param>
     /// <returns>Returns an HRESULT represents the success of the operation</returns>
     /// <seealso cref="Marshal.QueryInterface(nint, ref Guid, out nint)"/>
-    public int QueryInterface(void* thisPtr, in Guid iid, out void* ppObj);
+    public int QueryInterface(void* instancePtr, in Guid iid, out void* ppObj);
 
     /// <summary>
-    /// Perform a Release() call on the supplied IUnknown instance.
+    /// Perform a Release() call on the supplied unmanaged instance.
     /// </summary>
-    /// <param name="thisPtr">The IUnknown instance.</param>
+    /// <param name="instancePtr">A pointer representing the unmanaged instance.</param>
     /// <returns>The current reference count.</returns>
     /// <seealso cref="Marshal.Release(nint)"/>
-    public int Release(void* thisPtr);
+    public int Release(void* instancePtr);
 }
 
 /// <summary>
@@ -151,7 +164,7 @@ public unsafe interface IIUnknownCacheStrategy
 /// <summary>
 /// Base class for all COM source generated Runtime Callable Wrapper (RCWs).
 /// </summary>
-public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider
+public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider
 {
     /// <summary>
     /// Initialize ComObject instance.
@@ -159,7 +172,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
     /// <param name="interfaceDetailsStrategy">Strategy for getting details</param>
     /// <param name="iunknownStrategy">Interaction strategy for IUnknown</param>
     /// <param name="cacheStrategy">Caching strategy</param>
-    protected ComObject(IIUnknownInterfaceDetailsStrategy interfaceDetailsStrategy, IIUnknownStrategy iunknownStrategy, IIUnknownCacheStrategy cacheStrategy)
+    internal ComObject(IIUnknownInterfaceDetailsStrategy interfaceDetailsStrategy, IIUnknownStrategy iunknownStrategy, IIUnknownCacheStrategy cacheStrategy)
     {
         InterfaceDetailsStrategy = interfaceDetailsStrategy;
         IUnknownStrategy = iunknownStrategy;
@@ -172,25 +185,33 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
         IUnknownStrategy.Release(ThisPtr);
     }
 
+    private void* _thisPtr;
     /// <summary>
     /// Pointer to the unmanaged instance.
     /// </summary>
-    protected void* ThisPtr { get; init; }
+    public void* ThisPtr
+    {
+        get => _thisPtr;
+        internal init
+        {
+            _thisPtr = IUnknownStrategy.CreateInstancePointer(value);
+        }
+    }
 
     /// <summary>
     /// Interface details strategy.
     /// </summary>
-    protected IIUnknownInterfaceDetailsStrategy InterfaceDetailsStrategy { get; init; }
+    private IIUnknownInterfaceDetailsStrategy InterfaceDetailsStrategy { get; }
 
     /// <summary>
     /// IUnknown interaction strategy.
     /// </summary>
-    protected IIUnknownStrategy IUnknownStrategy { get; init; }
+    private IIUnknownStrategy IUnknownStrategy { get; }
 
     /// <summary>
     /// Caching strategy.
     /// </summary>
-    protected IIUnknownCacheStrategy CacheStrategy { get; init; }
+    private IIUnknownCacheStrategy CacheStrategy { get; }
 
     /// <summary>
     /// Returns an IDisposable that can be used to perform a final release
@@ -200,7 +221,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
     /// This property will only be non-null if the ComObject was created using
     /// CreateObjectFlags.UniqueInstance.
     /// </remarks>
-    public IDisposable? FinalRelease { get; }
+    public IDisposable? FinalRelease { get; internal init; }
 
     /// <inheritdoc />
     RuntimeTypeHandle IDynamicInterfaceCastable.GetInterfaceImplementation(RuntimeTypeHandle interfaceType)
@@ -270,9 +291,41 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
     }
 }
 
-public abstract class GeneratedComWrappersBase<TComObject> : ComWrappers
+public sealed class GeneratedComInterfaceAttribute<TComWrappers> : Attribute
+    where TComWrappers : GeneratedComWrappersBase
 {
-    protected override void ReleaseObjects(IEnumerable objects)
+}
+
+public abstract class GeneratedComWrappersBase : ComWrappers
+{
+    protected abstract IIUnknownInterfaceDetailsStrategy CreateInterfaceDetailsStrategy();
+
+    protected abstract IIUnknownStrategy CreateIUnknownStrategy();
+
+    protected abstract IIUnknownCacheStrategy CreateCacheStrategy();
+
+    protected override sealed unsafe object CreateObject(nint externalComObject, CreateObjectFlags flags)
+    {
+        if (flags.HasFlag(CreateObjectFlags.TrackerObject)
+            || flags.HasFlag(CreateObjectFlags.Aggregation))
+        {
+            throw new NotSupportedException();
+        }
+
+        var rcw = new ComObject(CreateInterfaceDetailsStrategy(), CreateIUnknownStrategy(), CreateCacheStrategy())
+        {
+            ThisPtr = (void*)externalComObject
+        };
+        if (flags.HasFlag(CreateObjectFlags.UniqueInstance))
+        {
+            // Set value on MyComObject to enable the FinalRelease option.
+            // This could also be achieved through an internal factory
+            // function on ComObject type.
+        }
+        return rcw;
+    }
+
+    protected override sealed void ReleaseObjects(IEnumerable objects)
     {
         throw new NotImplementedException();
     }

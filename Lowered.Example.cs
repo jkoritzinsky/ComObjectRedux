@@ -8,7 +8,8 @@ namespace Lowered;
 // It's excluded from the compilation as it depends on the generator providing the implementation and I didn't want to have two implementations of the same generated code.
 
 [IUnknownDerived<IComInterface1, Impl>]
-public partial interface IComInterface1 : IUnmanagedInterfaceType<IComInterface1, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
+[ObjectUnmanagedMapper<ComWrappersWrapperFactory<MyGeneratedComWrappers>>]
+public partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     [VirtualMethodIndex(3)]
     [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvMemberFunction) })]
@@ -19,7 +20,8 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType<IComInterface1
 }
 
 [IUnknownDerived<IComInterface2, Impl>]
-public partial interface IComInterface2 : IUnmanagedInterfaceType<IComInterface2, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
+[ObjectUnmanagedMapper<ComWrappersWrapperFactory<MyGeneratedComWrappers>>]
+public partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     [VirtualMethodIndex(3)]
     [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvMemberFunction) })]
@@ -35,7 +37,8 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType<IComInterface2
 }
 
 [IUnknownDerived<IComInterface3, Impl>]
-public partial interface IComInterface3 : IUnmanagedInterfaceType<IComInterface2, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
+[ObjectUnmanagedMapper<ComWrappersWrapperFactory<MyGeneratedComWrappers>>]
+public partial interface IComInterface3 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     [VirtualMethodIndex(3)]
     [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvMemberFunction) })]

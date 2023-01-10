@@ -17,6 +17,11 @@ public sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
 {
     public static readonly IIUnknownStrategy Instance = new FreeThreadedStrategy();
 
+    void* IIUnknownStrategy.CreateInstancePointer(void* unknown)
+    {
+        return unknown;
+    }
+
     unsafe int IIUnknownStrategy.QueryInterface(void* thisPtr, in Guid handle, out void* ppObj)
     {
         int hr = Marshal.QueryInterface((nint)thisPtr, ref Unsafe.AsRef(in handle), out nint ppv);
