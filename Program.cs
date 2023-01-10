@@ -1,55 +1,153 @@
 ﻿using System.Collections;
 using System.Diagnostics;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 #region Base impl
-public readonly ref struct VirtualMethodTableInfo
+namespace System.Runtime.InteropServices.Marshalling;
+
+/// <summary>
+/// Information about a virtual method table and the unmanaged instance pointer.
+/// </summary>
+public readonly unsafe struct VirtualMethodTableInfo
 {
-    public VirtualMethodTableInfo(IntPtr thisPointer, ReadOnlySpan<IntPtr> virtualMethodTable)
+    /// <summary>
+    /// Construct a <see cref="VirtualMethodTableInfo"/> from a given instance pointer and table memory.
+    /// </summary>
+    /// <param name="thisPointer">The pointer to the instance.</param>
+    /// <param name="virtualMethodTable">The block of memory that represents the virtual method table.</param>
+    public VirtualMethodTableInfo(void* thisPointer, void** virtualMethodTable)
     {
         ThisPointer = thisPointer;
         VirtualMethodTable = virtualMethodTable;
     }
 
-    public IntPtr ThisPointer { get; }
-    public ReadOnlySpan<IntPtr> VirtualMethodTable { get; }
+    /// <summary>
+    /// The unmanaged instance pointer
+    /// </summary>
+    public void* ThisPointer { get; }
 
-    public void Deconstruct(out IntPtr thisPointer, out ReadOnlySpan<IntPtr> virtualMethodTable)
+    /// <summary>
+    /// The virtual method table.
+    /// </summary>
+    public void** VirtualMethodTable { get; }
+
+    /// <summary>
+    /// Deconstruct this structure into its two fields.
+    /// </summary>
+    /// <param name="thisPointer">The <see cref="ThisPointer"/> result</param>
+    /// <param name="virtualMethodTable">The <see cref="VirtualMethodTable"/> result</param>
+    public void Deconstruct(out void* thisPointer, out void** virtualMethodTable)
     {
         thisPointer = ThisPointer;
         virtualMethodTable = VirtualMethodTable;
     }
 }
 
-public interface IUnmanagedVirtualMethodTableProvider
+/// <summary>
+/// This interface allows an object to provide information about a virtual method table for a managed interface to enable invoking methods in the virtual method table.
+/// </summary>
+public unsafe interface IUnmanagedVirtualMethodTableProvider
 {
-    // Forward from a generic non-virtual to a non-generic virtual as lookup
-    // for interface information can go through generic attributes like we do below for COM
-    // for whatever information is required for the domain-specific implementation
-    // and generic virtual method dispatch can be extremely slow.
-    protected VirtualMethodTableInfo GetVirtualMethodTableInfoForKey(Type t);
+    /// <summary>
+    /// Get the information about the virtual method table for a given unmanaged interface type represented by <paramref name="type"/>.
+    /// </summary>
+    /// <param name="type">The managed type for the unmanaged interface.</param>
+    /// <returns>The virtual method table information for the unmanaged interface.</returns>
+    public VirtualMethodTableInfo GetVirtualMethodTableInfoForKey(Type type);
+}
 
-    public sealed VirtualMethodTableInfo GetVirtualMethodTableInfoForKey<TUnmanagedInterfaceType>()
-        where TUnmanagedInterfaceType : IUnmanagedInterfaceType
+/// <summary>
+/// A factory to create an unmanaged "this pointer" from a managed object and to get a managed object from an unmanaged "this pointer".
+/// </summary>
+public unsafe interface IUnmanagedObjectWrapperFactory
+{
+    /// <summary>
+    /// Get a pointer that wraps a managed implementation of an unmanaged interface that can be passed to unmanaged code.
+    /// </summary>
+    /// <param name="obj">The managed object that implements the unmanaged interface.</param>
+    /// <returns>A unmanaged "this pointer" that can be passed to unmanaged code that represents <paramref name="obj"/></returns>
+    public static abstract void* GetUnmanagedWrapperForObject(object obj);
+
+    /// <summary>
+    /// Get the object wrapped by <paramref name="ptr"/>.
+    /// </summary>
+    /// <param name="ptr">A an unmanaged "this pointer".</param>
+    /// <returns>The object wrapped by <paramref name="ptr"/>.</returns>
+    public static abstract object GetObjectForUnmanagedWrapper(void* ptr);
+}
+
+/// <summary>
+/// This interface allows another interface to define that it represents a manavged projection of an unmanaged interface from some unmanaged type system and supports passing managed implementations of unmanaged interfaces to unmanaged code.
+/// </summary>
+/// <typeparam name="TInterface">The managed interface.</typeparam>
+/// <typeparam name="TUnmanagedObjectWrapperFactory">The factory to create an unmanaged "this pointer" from a managed object and to get a managed object from an unmanaged "this pointer".</typeparam>
+public unsafe interface IUnmanagedInterfaceType<TInterface, TUnmanagedObjectWrapperFactory>
+    where TInterface : IUnmanagedInterfaceType<TInterface, TUnmanagedObjectWrapperFactory>
+    where TUnmanagedObjectWrapperFactory: IUnmanagedObjectWrapperFactory, new()
+{
+    /// <summary>
+    /// Get a pointer to the virtual method table of managed implementations of the unmanaged interface type.
+    /// </summary>
+    /// <returns>A pointer to the virtual method table of managed implementations of the unmanaged interface type</returns>
+    /// <remarks>TODO: Source generated</remarks>
+    public abstract static void* VirtualMethodTableManagedImplementation { get; }
+
+    /// <summary>
+    /// Get a pointer that wraps a managed implementation of an unmanaged interface that can be passed to unmanaged code.
+    /// </summary>
+    /// <param name="obj">The managed object that implements the unmanaged interface.</param>
+    /// <returns>A unmanaged "this pointer" that can be passed to unmanaged code that represents <paramref name="obj"/></returns>
+    public static void* GetUnmanagedWrapperForObject(TInterface obj) { return TUnmanagedObjectWrapperFactory.GetUnmanagedWrapperForObject(obj); }
+
+    /// <summary>
+    /// Get the object wrapped by <paramref name="ptr"/>.
+    /// </summary>
+    /// <param name="ptr">A an unmanaged "this pointer".</param>
+    /// <returns>The object wrapped by <paramref name="ptr"/>.</returns>
+    public static TInterface GetObjectForUnmanagedWrapper(void* ptr) { return (TInterface)TUnmanagedObjectWrapperFactory.GetObjectForUnmanagedWrapper(ptr); }
+}
+/// <summary>
+/// Marshals an exception object to the value of its <see cref="Exception.HResult"/> converted to <typeparamref name="T"/>.
+/// </summary>
+/// <typeparam name="T">The unmanaged type to convert the HResult to.</typeparam>
+
+// TODO: Update our correctness analyzer to allow a non-generic managed type with a generic marshaller.
+// We can determine the correct information at the usage site.
+#pragma warning disable SYSLIB1055 // The managed type 'System.Exception' for entry-point marshaller type 'System.Runtime.InteropServices.Marshalling.ExceptionHResultMarshaller<T>' must be a closed generic type, have the same arity as the managed type if it is a value marshaller, or have one additional generic parameter if it is a collection marshaller.
+
+[CustomMarshaller(typeof(Exception), MarshalMode.UnmanagedToManagedOut, typeof(ExceptionHResultMarshaller<>))]
+#pragma warning restore SYSLIB1055
+public static class ExceptionHResultMarshaller<T>
+    where T : unmanaged, INumber<T>
+{
+    /// <summary>
+    /// Marshals an exception object to the value of its <see cref="Exception.HResult"/> converted to <typeparamref name="T"/>.
+    /// </summary>
+    /// <param name="e">The exception.</param>
+    /// <returns>The HResult of the exception, converted to <typeparamref name="T"/>.</returns>
+    public static T ConvertToUnmanaged(Exception e)
     {
-        return GetVirtualMethodTableInfoForKey(typeof(TUnmanagedInterfaceType));
+        // Use GetHRForException to ensure the runtime sets up the IErrorInfo object
+        // and calls SetErrorInfo if the platform supports it.
+
+        // We use CreateTruncating here to convert from the int return type of Marshal.GetHRForException
+        // to whatever the T is. A "truncating" conversion in this case is the same as an unchecked conversion like
+        // (uint)Marshal.GetHRForException(e) would be if we were writing a non-generic marshaller.
+        // Since we're using the INumber<T> interface, this is the correct mechanism to represent that conversion.
+        return T.CreateTruncating(Marshal.GetHRForException(e));
     }
-}
-
-public interface IUnmanagedInterfaceType
-{
-    public abstract static int VTableLength { get; }
-}
-
-public interface IIUnknownInterfaceType
-{
-    public abstract static Guid Iid { get; }
 }
 #endregion Base impl
 
 #region COM layer
+public interface IIUnknownInterfaceType
+{
+    public abstract static Guid Iid { get; }
+}
+
 /// <summary>
 /// Details for the IUnknown derived interface.
 /// </summary>
@@ -65,11 +163,6 @@ public interface IUnknownDerivedDetails
     /// </summary>
     public Type Implementation { get; }
 
-    /// <summary>
-    /// Total length of the vtable.
-    /// </summary>
-    public int VTableTotalLength { get; }
-
     internal static IUnknownDerivedDetails? GetFromAttribute(RuntimeTypeHandle handle)
     {
         var type = Type.GetTypeFromHandle(handle);
@@ -81,14 +174,25 @@ public interface IUnknownDerivedDetails
     }
 }
 
-/// <summary>
-/// Attribute used to indicate an interface derives from IUnknown.
-/// </summary>
-/// <typeparam name="T">The managed definition of the derived interface.</typeparam>
-/// <typeparam name="TImpl">The managed implementation of the derived interface.</typeparam>
+public sealed unsafe class ComWrappersWrapperFactory<T> : IUnmanagedObjectWrapperFactory
+    where T : ComWrappers, new()
+{
+    private static readonly T _comWrappers = new T();
+
+    public static void* GetUnmanagedWrapperForObject(object obj)
+    {
+        return (void*)_comWrappers.GetOrCreateComInterfaceForObject(obj, CreateComInterfaceFlags.None);
+    }
+
+    public static object GetObjectForUnmanagedWrapper(void* ptr)
+    {
+        return _comWrappers.GetOrCreateObjectForComInstance((nint)ptr, CreateObjectFlags.None);
+    }
+}
+
 [AttributeUsage(AttributeTargets.Interface)]
 public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDetails
-    where T : IUnmanagedInterfaceType, IIUnknownInterfaceType
+    where T : IIUnknownInterfaceType
     where TImpl : T
 {
     public IUnknownDerivedAttribute()
@@ -100,9 +204,6 @@ public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDeta
 
     /// <inheritdoc />
     public Type Implementation => typeof(TImpl);
-
-    /// <inheritdoc />
-    public int VTableTotalLength => T.VTableLength;
 }
 
 /// <summary>
@@ -151,7 +252,6 @@ public unsafe interface IIUnknownCacheStrategy
     {
         public void* ThisPtr { get; init; }
         public void** Table { get; init; }
-        public int TableLength { get; init; }
         public RuntimeTypeHandle ManagedType { get; init; }
     }
 
@@ -305,7 +405,7 @@ public abstract unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVi
             Marshal.ThrowExceptionForHR(qiHResult);
         }
 
-        return new((nint)result.ThisPtr, new ReadOnlySpan<nint>(result.Table, result.TableLength));
+        return new(result.ThisPtr, result.Table);
     }
 }
 
@@ -364,7 +464,6 @@ public sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
         {
             ThisPtr = obj,
             Table = *obj,
-            TableLength = details.VTableTotalLength,
             ManagedType = details.Implementation.TypeHandle
         };
     }
@@ -391,8 +490,19 @@ public sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
 #endregion
 
 #region Generated
+file abstract unsafe class IUnknownVTableComWrappers : ComWrappers
+{
+	public static void GetIUnknownImpl(out void* pQueryInterface, out void* pAddRef, out void* pRelease)
+    {
+		nint qi, addRef, release;
+        ComWrappers.GetIUnknownImpl(out qi, out addRef, out release);
+        pQueryInterface = (void*)qi;
+        pAddRef = (void*)addRef;
+        pRelease = (void*)release;
+    }
+}
 
-internal sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObject>
+public sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObject>
 {
     protected override unsafe ComInterfaceEntry* ComputeVtables(object obj, CreateComInterfaceFlags flags, out int count)
         => throw new NotImplementedException();
@@ -417,44 +527,130 @@ internal sealed class MyGeneratedComWrappers : GeneratedComWrappersBase<MyComObj
 }
 
 [IUnknownDerived<IComInterface1, Impl>]
-public partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnknownInterfaceType
+public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType<IComInterface1, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1");
-    static int IUnmanagedInterfaceType.VTableLength => 4;
+
+    private static void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 4);
+
+    static void* IUnmanagedInterfaceType<IComInterface1, ComWrappersWrapperFactory<MyGeneratedComWrappers>>.VirtualMethodTableManagedImplementation
+    {
+        get
+        {
+            if (m_vtable[0] == null)
+            {
+                IUnknownVTableComWrappers.GetIUnknownImpl(out m_vtable[0], out m_vtable[1], out m_vtable[2]);
+                Impl.PopulateManagedVirtualMethodTable(m_vtable);
+            }
+            return m_vtable;
+        }
+    }
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface1
     {
+        internal static void PopulateManagedVirtualMethodTable(void* table)
+        {
+            var vtable = (void**)table;
+            vtable[3] = (delegate* unmanaged[Stdcall, MemberFunction]<void*, int>)&ABI_Method;
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvMemberFunction) })]
+        private static int ABI_Method(void* thisPtr)
+        {
+            int retVal = 0;
+            try
+            {
+                IComInterface1 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                @this.Method();
+            }
+            catch (System.Exception ex)
+            {
+                retVal = ExceptionHResultMarshaller<int>.ConvertToUnmanaged(ex);
+            }
+            return retVal;
+        }
+
         void IComInterface1.Method()
         {
-            unsafe
+            var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(IComInterface1));
+            int hr = ((delegate* unmanaged<void*, int>)vtable[3])(thisPtr);
+            if (hr < 0)
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface1>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
-                if (hr < 0)
-                {
-                    Marshal.ThrowExceptionForHR(hr);
-                }
+                Marshal.ThrowExceptionForHR(hr);
             }
         }
     }
 }
 
 [IUnknownDerived<IComInterface2, Impl>]
-public partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInterfaceType
+public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType<IComInterface2, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2");
-    static int IUnmanagedInterfaceType.VTableLength => 5;
+
+    private static void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 5);
+
+    static void* IUnmanagedInterfaceType<IComInterface2, ComWrappersWrapperFactory<MyGeneratedComWrappers>>.VirtualMethodTableManagedImplementation
+    {
+        get
+        {
+            if (m_vtable[0] == null)
+            {
+                IUnknownVTableComWrappers.GetIUnknownImpl(out m_vtable[0], out m_vtable[1], out m_vtable[2]);
+                Impl.PopulateManagedVirtualMethodTable(m_vtable);
+            }
+            return m_vtable;
+        }
+    }
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface2
     {
+        internal static void PopulateManagedVirtualMethodTable(void* table)
+        {
+            var vtable = (void**)table;
+            vtable[3] = (delegate* unmanaged[Stdcall, MemberFunction]<void*, int>)&ABI_Method1;
+            vtable[4] = (delegate* unmanaged[Stdcall, MemberFunction]<void*, int>)&ABI_Method2;
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvMemberFunction) })]
+        private static int ABI_Method1(void* thisPtr)
+        {
+            int retVal = 0;
+            try
+            {
+                IComInterface2 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                @this.Method1();
+            }
+            catch (System.Exception ex)
+            {
+                retVal = ExceptionHResultMarshaller<int>.ConvertToUnmanaged(ex);
+            }
+            return retVal;
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvMemberFunction) })]
+        private static int ABI_Method2(void* thisPtr)
+        {
+            int retVal = 0;
+            try
+            {
+                IComInterface2 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                @this.Method2();
+            }
+            catch (System.Exception ex)
+            {
+                retVal = ExceptionHResultMarshaller<int>.ConvertToUnmanaged(ex);
+            }
+            return retVal;
+        }
+
         void IComInterface2.Method1()
         {
             unsafe
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(IComInterface2));
+                int hr = ((delegate* unmanaged<void*, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
                     Marshal.ThrowExceptionForHR(hr);
@@ -465,8 +661,8 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInte
         {
             unsafe
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface2>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[4])(thisPtr);
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(IComInterface2));
+                int hr = ((delegate* unmanaged<void*, int>)vtable[4])(thisPtr);
                 if (hr < 0)
                 {
                     Marshal.ThrowExceptionForHR(hr);
@@ -477,21 +673,57 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInte
 }
 
 [IUnknownDerived<IComInterface3, Impl>]
-public partial interface IComInterface3 : IUnmanagedInterfaceType, IIUnknownInterfaceType
+public unsafe partial interface IComInterface3 : IUnmanagedInterfaceType<IComInterface3, ComWrappersWrapperFactory<MyGeneratedComWrappers>>, IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3");
 
-    static int IUnmanagedInterfaceType.VTableLength => 4;
+
+    private static void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface3), sizeof(void*) * 4);
+
+    static void* IUnmanagedInterfaceType<IComInterface3, ComWrappersWrapperFactory<MyGeneratedComWrappers>>.VirtualMethodTableManagedImplementation
+    {
+        get
+        {
+            if (m_vtable[0] == null)
+            {
+                IUnknownVTableComWrappers.GetIUnknownImpl(out m_vtable[0], out m_vtable[1], out m_vtable[2]);
+                Impl.PopulateManagedVirtualMethodTable(m_vtable);
+            }
+            return m_vtable;
+        }
+    }
 
     [DynamicInterfaceCastableImplementation]
     internal interface Impl : IComInterface3
     {
+        internal static void PopulateManagedVirtualMethodTable(void* table)
+        {
+            var vtable = (void**)table;
+            vtable[3] = (delegate* unmanaged[Stdcall, MemberFunction]<void*, int>)&ABI_Method;
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall), typeof(CallConvMemberFunction) })]
+        private static int ABI_Method(void* thisPtr)
+        {
+            int retVal = 0;
+            try
+            {
+                IComInterface3 @this = GetObjectForUnmanagedWrapper(thisPtr);
+                @this.Method();
+            }
+            catch (System.Exception ex)
+            {
+                retVal = ExceptionHResultMarshaller<int>.ConvertToUnmanaged(ex);
+            }
+            return retVal;
+        }
+
         void IComInterface3.Method()
         {
             unsafe
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey<IComInterface3>();
-                int hr = ((delegate* unmanaged<nint, int>)vtable[3])(thisPtr);
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(IComInterface3));
+                int hr = ((delegate* unmanaged<void*, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
                     Marshal.ThrowExceptionForHR(hr);
@@ -524,7 +756,7 @@ public partial interface IComInterface3
 
 // User-defined implementation of ComObject that provides the requested strategy implementations.
 // This type will be provided to the source generator through the GeneratedComInterface attribute.
-internal unsafe class MyComObject : ComObject
+public unsafe class MyComObject : ComObject
 {
     internal MyComObject(void* thisPtr)
         : base(DefaultIUnknownInterfaceDetailsStrategy.Instance, FreeThreadedStrategy.Instance, new DefaultCaching())
