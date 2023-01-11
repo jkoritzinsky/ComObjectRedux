@@ -25,18 +25,4 @@ public partial interface IComInterface3
 
 internal sealed partial class MyGeneratedComWrappers : GeneratedComWrappersBase
 {
-    protected override IIUnknownCacheStrategy CreateCacheStrategy()
-    {
-        return new DefaultCaching();
-    }
-
-    protected override IIUnknownInterfaceDetailsStrategy CreateInterfaceDetailsStrategy()
-    {
-        return DefaultIUnknownInterfaceDetailsStrategy.Instance;
-    }
-
-    protected override IIUnknownStrategy CreateIUnknownStrategy()
-    {
-        return FreeThreadedStrategy.Instance;
-    }
 }

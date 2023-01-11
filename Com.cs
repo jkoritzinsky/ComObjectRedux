@@ -298,11 +298,11 @@ public sealed class GeneratedComInterfaceAttribute<TComWrappers> : Attribute
 
 public abstract class GeneratedComWrappersBase : ComWrappers
 {
-    protected abstract IIUnknownInterfaceDetailsStrategy CreateInterfaceDetailsStrategy();
+    protected virtual IIUnknownInterfaceDetailsStrategy CreateInterfaceDetailsStrategy() => DefaultIUnknownInterfaceDetailsStrategy.Instance;
 
-    protected abstract IIUnknownStrategy CreateIUnknownStrategy();
+    protected virtual IIUnknownStrategy CreateIUnknownStrategy() => FreeThreadedStrategy.Instance;
 
-    protected abstract IIUnknownCacheStrategy CreateCacheStrategy();
+    protected virtual IIUnknownCacheStrategy CreateCacheStrategy() => new DefaultCaching();
 
     protected override sealed unsafe object CreateObject(nint externalComObject, CreateObjectFlags flags)
     {
