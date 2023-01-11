@@ -55,7 +55,7 @@ public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnkn
             int retVal = 0;
             try
             {
-                IComInterface1 @this = (IComInterface1)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface1 @this = (IComInterface1)ComWrappersMapper<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method();
             }
             catch (System.Exception ex)
@@ -113,7 +113,7 @@ public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnkn
             int retVal = 0;
             try
             {
-                IComInterface2 @this = (IComInterface2)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface2 @this = (IComInterface2)ComWrappersMapper<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method1();
             }
             catch (System.Exception ex)
@@ -129,7 +129,7 @@ public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnkn
             int retVal = 0;
             try
             {
-                IComInterface2 @this = (IComInterface2)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface2 @this = (IComInterface2)ComWrappersMapper<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method2();
             }
             catch (System.Exception ex)
@@ -202,7 +202,7 @@ public unsafe partial interface IComInterface3 : IUnmanagedInterfaceType, IIUnkn
             int retVal = 0;
             try
             {
-                IComInterface3 @this = (IComInterface3)ComWrappersWrapperFactory<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
+                IComInterface3 @this = (IComInterface3)ComWrappersMapper<MyGeneratedComWrappers>.GetObjectForUnmanagedWrapper(thisPtr);
                 @this.Method();
             }
             catch (System.Exception ex)

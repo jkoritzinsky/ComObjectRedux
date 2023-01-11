@@ -56,7 +56,7 @@ public unsafe interface IUnmanagedVirtualMethodTableProvider
 /// <summary>
 /// A factory to create an unmanaged "this pointer" from a managed object and to get a managed object from an unmanaged "this pointer".
 /// </summary>
-public unsafe interface IUnmanagedObjectWrapperFactory
+public unsafe interface IUnmanagedObjectMapper
 {
     /// <summary>
     /// Get a pointer that wraps a managed implementation of an unmanaged interface that can be passed to unmanaged code.
@@ -178,6 +178,6 @@ public class VirtualMethodIndexAttribute : Attribute
 
 [AttributeUsage(AttributeTargets.Interface)]
 public class ObjectUnmanagedMapperAttribute<TMapper> : Attribute
-    where TMapper : IUnmanagedObjectWrapperFactory
+    where TMapper : IUnmanagedObjectMapper
 {
 }

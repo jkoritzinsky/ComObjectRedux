@@ -35,7 +35,7 @@ public interface IUnknownDerivedDetails
     }
 }
 
-public sealed unsafe class ComWrappersWrapperFactory<T> : IUnmanagedObjectWrapperFactory
+public sealed unsafe class ComWrappersMapper<T> : IUnmanagedObjectMapper
     where T : ComWrappers, new()
 {
     private static readonly T _comWrappers = new T();
@@ -47,7 +47,7 @@ public sealed unsafe class ComWrappersWrapperFactory<T> : IUnmanagedObjectWrappe
 
     public static object GetObjectForUnmanagedWrapper(void* ptr)
     {
-        return _comWrappers.GetOrCreateObjectForComInstance((nint)ptr, CreateObjectFlags.None);
+        return ComWrappers.ComInterfaceDispatch.GetInstance<object>((ComWrappers.ComInterfaceDispatch*)ptr);
     }
 }
 
