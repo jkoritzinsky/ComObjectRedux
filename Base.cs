@@ -75,7 +75,10 @@ public unsafe interface IUnmanagedInterfaceType
     /// Get a pointer to the virtual method table of managed implementations of the unmanaged interface type.
     /// </summary>
     /// <returns>A pointer to the virtual method table of managed implementations of the unmanaged interface type</returns>
-    /// <remarks>TODO: Source generated</remarks>
+    /// <remarks>
+    /// Implementation will be provided by a source generator if not explicitly implemented.
+    /// This property can return <c>null</c>. If it does, then the interface is not supported for passing managed implementations to unmanaged code.
+    /// </remarks>
     public abstract static void* VirtualMethodTableManagedImplementation { get; }
 }
 

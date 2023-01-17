@@ -4,7 +4,7 @@ using System.Reflection;
 
 namespace System.Runtime.InteropServices.Marshalling;
 
-public interface IIUnknownInterfaceType
+public interface IIUnknownInterfaceType : IUnmanagedInterfaceType
 {
     public abstract static Guid Iid { get; }
 }
@@ -20,9 +20,14 @@ public interface IUnknownDerivedDetails
     public Guid Iid { get; }
 
     /// <summary>
-    /// Managed typed used to project the IUnknown derived interface.
+    /// Managed type used to project the IUnknown derived interface.
     /// </summary>
     public Type Implementation { get; }
+
+    /// <summary>
+    /// A pointer to the virtual method table to enable unmanaged callers to call a managed implementation of the interface.
+    /// </summary>
+    public unsafe void* VirtualMethodTableManagedImplementation { get; }
 
     internal static IUnknownDerivedDetails? GetFromAttribute(RuntimeTypeHandle handle)
     {
@@ -57,6 +62,9 @@ public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDeta
 
     /// <inheritdoc />
     public Type Implementation => typeof(TImpl);
+
+    /// <inheritdoc />
+    public unsafe void* VirtualMethodTableManagedImplementation => T.VirtualMethodTableManagedImplementation;
 }
 
 /// <summary>
