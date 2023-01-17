@@ -1,3 +1,4 @@
+// Implementations of the COM strategy interfaces defined in Com.cs that we would want to ship (can be internal only if we don't want to allow users to provide their own implementations in v1).
 using System.Runtime.CompilerServices;
 
 namespace System.Runtime.InteropServices.Marshalling;

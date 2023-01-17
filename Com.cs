@@ -1,3 +1,6 @@
+// Types for the COM source generator that implement the COM-specific interactions.
+// All of these APIs need to be exposed to implement the COM source generator in one form or another.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
@@ -37,14 +40,6 @@ public interface IUnknownDerivedDetails
             return null;
         }
         return (IUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<,>));
-    }
-}
-
-public sealed unsafe class ComWrappersUnwrapper : IUnmanagedObjectUnwrapper
-{
-    public static object GetObjectForUnmanagedWrapper(void* ptr)
-    {
-        return ComWrappers.ComInterfaceDispatch.GetInstance<object>((ComWrappers.ComInterfaceDispatch*)ptr);
     }
 }
 
@@ -189,10 +184,10 @@ public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirt
     /// <summary>
     /// Pointer to the unmanaged instance.
     /// </summary>
-    public void* ThisPtr
+    internal void* ThisPtr
     {
         get => _thisPtr;
-        internal init
+        init
         {
             _thisPtr = IUnknownStrategy.CreateInstancePointer(value);
         }
@@ -329,5 +324,14 @@ public abstract class GeneratedComWrappersBase : ComWrappers
     protected override sealed void ReleaseObjects(IEnumerable objects)
     {
         throw new NotImplementedException();
+    }
+
+    public ComObject GetOrCreateUniqueObjectForComInstance(nint comInstance, CreateObjectFlags flags)
+    {
+        if (flags.HasFlag(CreateObjectFlags.Unwrap))
+        {
+            throw new ArgumentException("Cannot create a unique object if unwrapping a ComWrappers-based COM object is requested.", nameof(flags));
+        }
+        return (ComObject)GetOrCreateObjectForComInstance(comInstance, flags | CreateObjectFlags.UniqueInstance);
     }
 }
