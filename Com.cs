@@ -35,16 +35,8 @@ public interface IUnknownDerivedDetails
     }
 }
 
-public sealed unsafe class ComWrappersMapper<T> : IUnmanagedObjectMapper
-    where T : ComWrappers, new()
+public sealed unsafe class ComWrappersUnwrapper : IUnmanagedObjectUnwrapper
 {
-    private static readonly T _comWrappers = new T();
-
-    public static void* GetUnmanagedWrapperForObject(object obj)
-    {
-        return (void*)_comWrappers.GetOrCreateComInterfaceForObject(obj, CreateComInterfaceFlags.None);
-    }
-
     public static object GetObjectForUnmanagedWrapper(void* ptr)
     {
         return ComWrappers.ComInterfaceDispatch.GetInstance<object>((ComWrappers.ComInterfaceDispatch*)ptr);
@@ -291,6 +283,7 @@ public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirt
     }
 }
 
+[AttributeUsage(AttributeTargets.Interface)]
 public sealed class GeneratedComInterfaceAttribute<TComWrappers> : Attribute
     where TComWrappers : GeneratedComWrappersBase
 {

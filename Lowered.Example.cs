@@ -8,7 +8,7 @@ namespace Lowered;
 // It's excluded from the compilation as it depends on the generator providing the implementation and I didn't want to have two implementations of the same generated code.
 
 [IUnknownDerived<IComInterface1, Impl>]
-[ObjectUnmanagedMapper<ComWrappersWrapperFactory<MyGeneratedComWrappers>>] // Not emitted
+[UnmanagedObjectUnwrapper<ComWrappersUnwrapper>] // Not emitted
 public partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     [VirtualMethodIndex(3)] // Not emitted
@@ -20,7 +20,7 @@ public partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnknownInte
 }
 
 [IUnknownDerived<IComInterface2, Impl>]
-[ObjectUnmanagedMapper<ComWrappersWrapperFactory<MyGeneratedComWrappers>>] // Not emitted
+[UnmanagedObjectUnwrapper<ComWrappersUnwrapper>] // Not emitted
 public partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     [VirtualMethodIndex(3)] // Not emitted
@@ -37,7 +37,7 @@ public partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInte
 }
 
 [IUnknownDerived<IComInterface3, Impl>]
-[ObjectUnmanagedMapper<ComWrappersWrapperFactory<MyGeneratedComWrappers>>] // Not emitted
+[UnmanagedObjectUnwrapper<ComWrappersUnwrapper>] // Not emitted
 public partial interface IComInterface3 : IUnmanagedInterfaceType, IIUnknownInterfaceType
 {
     [VirtualMethodIndex(3)] // Not emitted
