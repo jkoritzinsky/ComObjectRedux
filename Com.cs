@@ -161,36 +161,27 @@ public unsafe interface IIUnknownCacheStrategy
 /// </summary>
 public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirtualMethodTableProvider
 {
+    private readonly void* _instancePointer;
+
     /// <summary>
     /// Initialize ComObject instance.
     /// </summary>
     /// <param name="interfaceDetailsStrategy">Strategy for getting details</param>
     /// <param name="iunknownStrategy">Interaction strategy for IUnknown</param>
     /// <param name="cacheStrategy">Caching strategy</param>
-    internal ComObject(IIUnknownInterfaceDetailsStrategy interfaceDetailsStrategy, IIUnknownStrategy iunknownStrategy, IIUnknownCacheStrategy cacheStrategy)
+    /// <param name="thisPointer">Pointer to the identity IUnknown interface for the object.</param>
+    internal ComObject(IIUnknownInterfaceDetailsStrategy interfaceDetailsStrategy, IIUnknownStrategy iunknownStrategy, IIUnknownCacheStrategy cacheStrategy, void* thisPointer)
     {
         InterfaceDetailsStrategy = interfaceDetailsStrategy;
         IUnknownStrategy = iunknownStrategy;
         CacheStrategy = cacheStrategy;
+        _instancePointer = IUnknownStrategy.CreateInstancePointer(thisPointer);
     }
 
     ~ComObject()
     {
         CacheStrategy.Clear(IUnknownStrategy);
-        IUnknownStrategy.Release(ThisPtr);
-    }
-
-    private void* _thisPtr;
-    /// <summary>
-    /// Pointer to the unmanaged instance.
-    /// </summary>
-    internal void* ThisPtr
-    {
-        get => _thisPtr;
-        init
-        {
-            _thisPtr = IUnknownStrategy.CreateInstancePointer(value);
-        }
+        IUnknownStrategy.Release(_instancePointer);
     }
 
     /// <summary>
@@ -252,7 +243,7 @@ public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirt
             {
                 return false;
             }
-            int hr = IUnknownStrategy.QueryInterface(ThisPtr, details.Iid, out void* ppv);
+            int hr = IUnknownStrategy.QueryInterface(_instancePointer, details.Iid, out void* ppv);
             if (hr < 0)
             {
                 qiHResult = hr;
@@ -308,10 +299,7 @@ public abstract class GeneratedComWrappersBase : ComWrappers
             throw new NotSupportedException();
         }
 
-        var rcw = new ComObject(CreateInterfaceDetailsStrategy(), CreateIUnknownStrategy(), CreateCacheStrategy())
-        {
-            ThisPtr = (void*)externalComObject
-        };
+        var rcw = new ComObject(CreateInterfaceDetailsStrategy(), CreateIUnknownStrategy(), CreateCacheStrategy(), (void*)externalComObject);
         if (flags.HasFlag(CreateObjectFlags.UniqueInstance))
         {
             // Set value on MyComObject to enable the FinalRelease option.
