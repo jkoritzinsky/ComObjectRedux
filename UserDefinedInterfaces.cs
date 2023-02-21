@@ -1,14 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 
-[GeneratedComInterface<MyGeneratedComWrappers>]
+[GeneratedComInterface]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public partial interface IComInterface1
 {
     void Method();
 }
 
-[GeneratedComInterface<MyGeneratedComWrappers>]
+[GeneratedComInterface]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public partial interface IComInterface2
 {
@@ -16,13 +16,13 @@ public partial interface IComInterface2
     void Method2();
 }
 
-[GeneratedComInterface<MyGeneratedComWrappers>]
+[GeneratedComInterface]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public partial interface IComInterface3
 {
     void Method();
 }
 
-internal sealed partial class MyGeneratedComWrappers : GeneratedComWrappersBase
+internal sealed partial class MyGeneratedComWrappers : StrategyBasedComWrappers
 {
 }

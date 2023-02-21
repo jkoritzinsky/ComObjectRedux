@@ -4,17 +4,17 @@ using System.Runtime.CompilerServices;
 namespace System.Runtime.InteropServices.Marshalling;
 
 
-public sealed class DefaultIUnknownInterfaceDetailsStrategy : IIUnknownInterfaceDetailsStrategy
+internal sealed class DefaultIUnknownInterfaceDetailsStrategy : IIUnknownInterfaceDetailsStrategy
 {
     public static readonly IIUnknownInterfaceDetailsStrategy Instance = new DefaultIUnknownInterfaceDetailsStrategy();
 
-    public IUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type)
+    public IIUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type)
     {
-        return IUnknownDerivedDetails.GetFromAttribute(type);
+        return IIUnknownDerivedDetails.GetFromAttribute(type);
     }
 }
 
-public sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
+internal sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
 {
     public static readonly IIUnknownStrategy Instance = new FreeThreadedStrategy();
 
@@ -23,7 +23,7 @@ public sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
         return unknown;
     }
 
-    unsafe int IIUnknownStrategy.QueryInterface(void* thisPtr, in Guid handle, out void* ppObj)
+    unsafe int IIUnknownStrategy.QueryInterface(void* thisPtr, Guid handle, out void* ppObj)
     {
         int hr = Marshal.QueryInterface((nint)thisPtr, ref Unsafe.AsRef(in handle), out nint ppv);
         if (hr < 0)
@@ -37,23 +37,23 @@ public sealed unsafe class FreeThreadedStrategy : IIUnknownStrategy
         return hr;
     }
 
-    unsafe int IIUnknownStrategy.Release(void* thisPtr)
-        => Marshal.Release((nint)thisPtr);
+    unsafe uint IIUnknownStrategy.Release(void* thisPtr)
+        => (uint)Marshal.Release((nint)thisPtr);
 }
 
-public sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
+internal sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
 {
     // [TODO] Implement some smart/thread-safe caching
     private readonly Dictionary<RuntimeTypeHandle, IIUnknownCacheStrategy.TableInfo> _cache = new();
 
-    IIUnknownCacheStrategy.TableInfo IIUnknownCacheStrategy.ConstructTableInfo(RuntimeTypeHandle handle, IUnknownDerivedDetails details, void* ptr)
+    IIUnknownCacheStrategy.TableInfo IIUnknownCacheStrategy.ConstructTableInfo(RuntimeTypeHandle handle, IIUnknownDerivedDetails details, void* ptr)
     {
         var obj = (void***)ptr;
         return new IIUnknownCacheStrategy.TableInfo()
         {
-            ThisPtr = obj,
-            Table = *obj,
-            ManagedType = details.Implementation.TypeHandle
+            Instance = obj,
+            VirtualMethodTable = *obj,
+            Implementation = details.Implementation.TypeHandle
         };
     }
 
@@ -71,7 +71,7 @@ public sealed unsafe class DefaultCaching : IIUnknownCacheStrategy
     {
         foreach (var info in _cache.Values)
         {
-            _ = unknownStrategy.Release(info.ThisPtr);
+            _ = unknownStrategy.Release(info.Instance);
         }
         _cache.Clear();
     }
