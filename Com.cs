@@ -7,44 +7,54 @@ using System.Reflection;
 
 namespace System.Runtime.InteropServices.Marshalling;
 
-public interface IIUnknownInterfaceType : IUnmanagedInterfaceType
+public interface IIUnknownInterfaceType
 {
-    public abstract static Guid Iid { get; }
+    /// <summary>
+    /// Get a pointer to the virtual method table of managed implementations of the unmanaged interface type.
+    /// </summary>
+    /// <returns>A pointer to the virtual method table of managed implementations of the unmanaged interface type</returns>
+    /// <remarks>
+    /// Implementation will be provided by a source generator if not explicitly implemented.
+    /// This property can return <c>null</c>. If it does, then the interface is not supported for passing managed implementations to unmanaged code.
+    /// </remarks>
+    abstract static unsafe void** ManagedVirtualMethodTable { get; }
+
+    abstract static Guid Iid { get; }
 }
 
 /// <summary>
 /// Details for the IUnknown derived interface.
 /// </summary>
-public interface IUnknownDerivedDetails
+public interface IIUnknownDerivedDetails
 {
     /// <summary>
     /// Interface ID.
     /// </summary>
-    public Guid Iid { get; }
+    Guid Iid { get; }
 
     /// <summary>
     /// Managed type used to project the IUnknown derived interface.
     /// </summary>
-    public Type Implementation { get; }
+    Type Implementation { get; }
 
     /// <summary>
     /// A pointer to the virtual method table to enable unmanaged callers to call a managed implementation of the interface.
     /// </summary>
-    public unsafe void* VirtualMethodTableManagedImplementation { get; }
+    unsafe void** ManagedVirtualMethodTable { get; }
 
-    internal static IUnknownDerivedDetails? GetFromAttribute(RuntimeTypeHandle handle)
+    internal static IIUnknownDerivedDetails? GetFromAttribute(RuntimeTypeHandle handle)
     {
         var type = Type.GetTypeFromHandle(handle);
         if (type is null)
         {
             return null;
         }
-        return (IUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<,>));
+        return (IIUnknownDerivedDetails?)type.GetCustomAttribute(typeof(IUnknownDerivedAttribute<,>));
     }
 }
 
 [AttributeUsage(AttributeTargets.Interface)]
-public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDetails
+public sealed class IUnknownDerivedAttribute<T, TImpl> : Attribute, IIUnknownDerivedDetails
     where T : IIUnknownInterfaceType
     where TImpl : T
 {
@@ -59,7 +69,7 @@ public class IUnknownDerivedAttribute<T, TImpl> : Attribute, IUnknownDerivedDeta
     public Type Implementation => typeof(TImpl);
 
     /// <inheritdoc />
-    public unsafe void* VirtualMethodTableManagedImplementation => T.VirtualMethodTableManagedImplementation;
+    public unsafe void** ManagedVirtualMethodTable => T.ManagedVirtualMethodTable;
 }
 
 /// <summary>
@@ -70,7 +80,7 @@ public unsafe interface IIUnknownStrategy
     /// <summary>
     /// Create an instance pointer that represents the provided IUnknown instance.
     /// </summary>
-    /// <param name="unknown">The IUnknown instance.</param>
+    /// <param name="instance">The IUnknown instance.</param>
     /// <returns>A pointer representing the unmanaged instance.</returns>
     /// <remarks>
     /// This method is used to create an instance pointer that can be used to interact with the other members of this interface.
@@ -78,25 +88,25 @@ public unsafe interface IIUnknownStrategy
     /// that can be used in the QueryInterface and Release methods to enable creating thread-local instance pointers to us
     /// through the IAgileReference APIs instead of directly calling QueryInterface on the IUnknown.
     /// </remarks>
-    public void* CreateInstancePointer(void* unknown);
+    public void* CreateInstancePointer(void* instance);
 
     /// <summary>
     /// Perform a QueryInterface() for an IID on the unmanaged instance.
     /// </summary>
-    /// <param name="instancePtr">A pointer representing the unmanaged instance.</param>
-    /// <param name="iid">The IID (Interface ID) to query for.</param>
-    /// <param name="ppObj">The resulting interface</param>
+    /// <param name="instance">A pointer representing the unmanaged instance.</param>
+    /// <param name="interfaceId">The IID (Interface ID) to query for.</param>
+    /// <param name="obj">The resulting interface</param>
     /// <returns>Returns an HRESULT represents the success of the operation</returns>
     /// <seealso cref="Marshal.QueryInterface(nint, ref Guid, out nint)"/>
-    public int QueryInterface(void* instancePtr, in Guid iid, out void* ppObj);
+    public int QueryInterface(void* instance, Guid interfaceId, out void* obj);
 
     /// <summary>
     /// Perform a Release() call on the supplied unmanaged instance.
     /// </summary>
-    /// <param name="instancePtr">A pointer representing the unmanaged instance.</param>
+    /// <param name="instance">A pointer representing the unmanaged instance.</param>
     /// <returns>The current reference count.</returns>
     /// <seealso cref="Marshal.Release(nint)"/>
-    public int Release(void* instancePtr);
+    public uint Release(void* instance);
 }
 
 /// <summary>
@@ -109,7 +119,7 @@ public interface IIUnknownInterfaceDetailsStrategy
     /// </summary>
     /// <param name="type">RuntimeTypeHandle instance</param>
     /// <returns>Details if type is known.</returns>
-    IUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type);
+    IIUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type);
 }
 
 /// <summary>
@@ -119,9 +129,9 @@ public unsafe interface IIUnknownCacheStrategy
 {
     public readonly struct TableInfo
     {
-        public void* ThisPtr { get; init; }
-        public void** Table { get; init; }
-        public RuntimeTypeHandle ManagedType { get; init; }
+        public void* Instance { get; init; }
+        public void** VirtualMethodTable { get; init; }
+        public RuntimeTypeHandle Implementation { get; init; }
     }
 
     /// <summary>
@@ -131,7 +141,7 @@ public unsafe interface IIUnknownCacheStrategy
     /// <param name="ptr">Pointer to the instance to query</param>
     /// <param name="info">A <see cref="TableInfo"/> instance</param>
     /// <returns>True if success, otherwise false.</returns>
-    TableInfo ConstructTableInfo(RuntimeTypeHandle handle, IUnknownDerivedDetails interfaceDetails, void* ptr);
+    TableInfo ConstructTableInfo(RuntimeTypeHandle handle, IIUnknownDerivedDetails interfaceDetails, void* ptr);
 
     /// <summary>
     /// Get associated <see cref="TableInfo"/>.
@@ -207,7 +217,11 @@ public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirt
     /// This property will only be non-null if the ComObject was created using
     /// CreateObjectFlags.UniqueInstance.
     /// </remarks>
-    public IDisposable? FinalRelease { get; internal init; }
+    public void FinalRelease()
+    {
+        CacheStrategy.Clear(IUnknownStrategy);
+        IUnknownStrategy.Release(_instancePointer);
+    }
 
     /// <inheritdoc />
     RuntimeTypeHandle IDynamicInterfaceCastable.GetInterfaceImplementation(RuntimeTypeHandle interfaceType)
@@ -216,7 +230,7 @@ public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirt
         {
             Marshal.ThrowExceptionForHR(qiResult);
         }
-        return info.ManagedType;
+        return info.Implementation;
     }
 
     /// <inheritdoc />
@@ -238,7 +252,7 @@ public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirt
         qiHResult = 0;
         if (!CacheStrategy.TryGetTableInfo(handle, out result))
         {
-            IUnknownDerivedDetails? details = InterfaceDetailsStrategy.GetIUnknownDerivedDetails(handle);
+            IIUnknownDerivedDetails? details = InterfaceDetailsStrategy.GetIUnknownDerivedDetails(handle);
             if (details is null)
             {
                 return false;
@@ -273,23 +287,28 @@ public sealed unsafe class ComObject : IDynamicInterfaceCastable, IUnmanagedVirt
             Marshal.ThrowExceptionForHR(qiHResult);
         }
 
-        return new(result.ThisPtr, result.Table);
+        return new(result.Instance, result.VirtualMethodTable);
     }
 }
 
 [AttributeUsage(AttributeTargets.Interface)]
-public sealed class GeneratedComInterfaceAttribute<TComWrappers> : Attribute
-    where TComWrappers : GeneratedComWrappersBase
+public sealed class GeneratedComInterfaceAttribute : Attribute
 {
 }
 
-public abstract class GeneratedComWrappersBase : ComWrappers
+public abstract class StrategyBasedComWrappers : ComWrappers
 {
-    protected virtual IIUnknownInterfaceDetailsStrategy CreateInterfaceDetailsStrategy() => DefaultIUnknownInterfaceDetailsStrategy.Instance;
+    public static IIUnknownInterfaceDetailsStrategy DefaultIUnknownInterfaceDetailsStrategy { get; } = Marshalling.DefaultIUnknownInterfaceDetailsStrategy.Instance;
 
-    protected virtual IIUnknownStrategy CreateIUnknownStrategy() => FreeThreadedStrategy.Instance;
+    public static IIUnknownStrategy DefaultIUnknownStrategy { get; } = FreeThreadedStrategy.Instance;
 
-    protected virtual IIUnknownCacheStrategy CreateCacheStrategy() => new DefaultCaching();
+    protected static IIUnknownCacheStrategy CreateDefaultCacheStrategy() => new DefaultCaching();
+
+    protected virtual IIUnknownInterfaceDetailsStrategy GetOrCreateInterfaceDetailsStrategy() => DefaultIUnknownInterfaceDetailsStrategy;
+
+    protected virtual IIUnknownStrategy GetOrCreateIUnknownStrategy() => DefaultIUnknownStrategy;
+
+    protected virtual IIUnknownCacheStrategy CreateCacheStrategy() => CreateDefaultCacheStrategy();
 
     protected override sealed unsafe object CreateObject(nint externalComObject, CreateObjectFlags flags)
     {
@@ -299,7 +318,7 @@ public abstract class GeneratedComWrappersBase : ComWrappers
             throw new NotSupportedException();
         }
 
-        var rcw = new ComObject(CreateInterfaceDetailsStrategy(), CreateIUnknownStrategy(), CreateCacheStrategy(), (void*)externalComObject);
+        var rcw = new ComObject(GetOrCreateInterfaceDetailsStrategy(), GetOrCreateIUnknownStrategy(), CreateCacheStrategy(), (void*)externalComObject);
         if (flags.HasFlag(CreateObjectFlags.UniqueInstance))
         {
             // Set value on MyComObject to enable the FinalRelease option.
@@ -312,14 +331,5 @@ public abstract class GeneratedComWrappersBase : ComWrappers
     protected override sealed void ReleaseObjects(IEnumerable objects)
     {
         throw new NotImplementedException();
-    }
-
-    public ComObject GetOrCreateUniqueObjectForComInstance(nint comInstance, CreateObjectFlags flags)
-    {
-        if (flags.HasFlag(CreateObjectFlags.Unwrap))
-        {
-            throw new ArgumentException("Cannot create a unique object if unwrapping a ComWrappers-based COM object is requested.", nameof(flags));
-        }
-        return (ComObject)GetOrCreateObjectForComInstance(comInstance, flags | CreateObjectFlags.UniqueInstance);
     }
 }

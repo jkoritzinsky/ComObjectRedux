@@ -14,20 +14,20 @@ file abstract unsafe class IUnknownVTableComWrappers : ComWrappers
     }
 }
 
-internal sealed partial class MyGeneratedComWrappers : GeneratedComWrappersBase
+internal sealed partial class MyGeneratedComWrappers : StrategyBasedComWrappers
 {
     protected override unsafe ComInterfaceEntry* ComputeVtables(object obj, CreateComInterfaceFlags flags, out int count)
         => throw new NotImplementedException();
 }
 
 [IUnknownDerived<IComInterface1, Impl>]
-public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnknownInterfaceType
+public unsafe partial interface IComInterface1 : IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b1");
 
     private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 4);
 
-    static void* IUnmanagedInterfaceType.VirtualMethodTableManagedImplementation
+    static void** IIUnknownInterfaceType.ManagedVirtualMethodTable
     {
         get
         {
@@ -78,13 +78,13 @@ public unsafe partial interface IComInterface1 : IUnmanagedInterfaceType, IIUnkn
 }
 
 [IUnknownDerived<IComInterface2, Impl>]
-public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnknownInterfaceType
+public unsafe partial interface IComInterface2 : IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b2");
 
     private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface1), sizeof(void*) * 5);
 
-    static void* IUnmanagedInterfaceType.VirtualMethodTableManagedImplementation
+    static void** IIUnknownInterfaceType.ManagedVirtualMethodTable
     {
         get
         {
@@ -167,14 +167,14 @@ public unsafe partial interface IComInterface2 : IUnmanagedInterfaceType, IIUnkn
 }
 
 [IUnknownDerived<IComInterface3, Impl>]
-public unsafe partial interface IComInterface3 : IUnmanagedInterfaceType, IIUnknownInterfaceType
+public unsafe partial interface IComInterface3 : IIUnknownInterfaceType
 {
     static Guid IIUnknownInterfaceType.Iid => new Guid("2c3f9903-b586-46b1-881b-adfce9af47b3");
 
 
     private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(IComInterface3), sizeof(void*) * 4);
 
-    static void* IUnmanagedInterfaceType.VirtualMethodTableManagedImplementation
+    static void** IIUnknownInterfaceType.ManagedVirtualMethodTable
     {
         get
         {
