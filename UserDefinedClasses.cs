@@ -14,6 +14,7 @@ class A : IComInterface1
 // IIUnknownInterfaceType (since IComInterface1 and IComInterface3 both implement it).
 // By making it generic, we can disambiguate the implementations
 // while still being able to retrieve the information we need through IUnknownDetailsAttribute.
+
 class B : IComInterface1, IComInterface3
 {
     void IComInterface1.Method()
@@ -48,4 +49,12 @@ class D : IComInterface4
     {
         Console.WriteLine("--- D.IComInterface4.DerivedMethod");
     }
+}
+
+[GeneratedComClass(typeof(A))]
+[GeneratedComClass(typeof(B))]
+[GeneratedComClass(typeof(C))]
+[GeneratedComClass(typeof(D))]
+internal sealed partial class MyGeneratedComWrappers : StrategyBasedComWrappers
+{
 }
