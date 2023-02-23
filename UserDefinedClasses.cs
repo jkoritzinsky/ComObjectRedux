@@ -36,15 +36,15 @@ class C : IComInterface2, INotAComInterface
 {
     void IComInterface2.Method1()
     {
-        Console.WriteLine("--- B.IComInterface2.Method1");
+        Console.WriteLine("--- C.IComInterface2.Method1");
     }
     void IComInterface2.Method2()
     {
-        Console.WriteLine("--- B.IComInterface2.Method2");
+        Console.WriteLine("--- C.IComInterface2.Method2");
     }
     void INotAComInterface.Method()
     {
-        Console.WriteLine("--- B.INotAComInterface.Method");
+        Console.WriteLine("--- C.INotAComInterface.Method");
     }
 }
 
