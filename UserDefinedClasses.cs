@@ -27,7 +27,12 @@ class B : IComInterface1, IComInterface3
     }
 }
 
-class C : IComInterface2
+interface INotAComInterface
+{
+    void Method();
+}
+
+class C : IComInterface2, INotAComInterface
 {
     void IComInterface2.Method1()
     {
@@ -36,6 +41,10 @@ class C : IComInterface2
     void IComInterface2.Method2()
     {
         Console.WriteLine("--- B.IComInterface2.Method2");
+    }
+    void INotAComInterface.Method()
+    {
+        Console.WriteLine("--- B.INotAComInterface.Method");
     }
 }
 
