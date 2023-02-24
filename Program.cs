@@ -88,9 +88,8 @@ public unsafe class Program
         return 0;
 
         static Guid GetTypeKey<T>()
-            where T : IIUnknownInterfaceType
         {
-            return T.Iid;
+            return DefaultIUnknownInterfaceDetailsStrategy.Instance.GetIUnknownDerivedDetails(typeof(T).TypeHandle)!.Iid;
         }
     }
 

@@ -56,7 +56,6 @@ public interface IIUnknownDerivedDetails
 [AttributeUsage(AttributeTargets.Interface)]
 public sealed class IUnknownDerivedAttribute<T, TImpl> : Attribute, IIUnknownDerivedDetails
     where T : IIUnknownInterfaceType
-    where TImpl : T
 {
     public IUnknownDerivedAttribute()
     {
@@ -332,4 +331,15 @@ public abstract class StrategyBasedComWrappers : ComWrappers
     {
         throw new NotImplementedException();
     }
+}
+
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
+public sealed class GeneratedComClassAttribute : Attribute
+{
+    public GeneratedComClassAttribute(Type classType)
+    {
+        ClassType = classType;
+    }
+
+    public Type ClassType { get; }
 }
