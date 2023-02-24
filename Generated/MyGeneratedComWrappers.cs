@@ -15,7 +15,7 @@ internal sealed unsafe partial class MyGeneratedComWrappers : StrategyBasedComWr
             ComInterfaceEntry* vtable = (ComInterfaceEntry*)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(A), sizeof(ComInterfaceEntry) * 1);
             IIUnknownDerivedDetails? details;
             details = detailsStrategy.GetIUnknownDerivedDetails(typeof(IComInterface1).TypeHandle);
-            if (details is not null)
+            if (details is not null && details.ManagedVirtualMethodTable != null)
             {
                 vtable[0].IID = details.Iid;
                 vtable[0].Vtable = (nint)details.ManagedVirtualMethodTable;
@@ -35,13 +35,13 @@ internal sealed unsafe partial class MyGeneratedComWrappers : StrategyBasedComWr
             ComInterfaceEntry* vtable = (ComInterfaceEntry*)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(B), sizeof(ComInterfaceEntry) * 2);
             IIUnknownDerivedDetails? details;
             details = detailsStrategy.GetIUnknownDerivedDetails(typeof(IComInterface1).TypeHandle);
-            if (details is not null)
+            if (details is not null && details.ManagedVirtualMethodTable != null)
             {
                 vtable[0].IID = details.Iid;
                 vtable[0].Vtable = (nint)details.ManagedVirtualMethodTable;
             }
             details = detailsStrategy.GetIUnknownDerivedDetails(typeof(IComInterface3).TypeHandle);
-            if (details is not null)
+            if (details is not null && details.ManagedVirtualMethodTable != null)
             {
                 vtable[1].IID = details.Iid;
                 vtable[1].Vtable = (nint)details.ManagedVirtualMethodTable;
@@ -61,13 +61,13 @@ internal sealed unsafe partial class MyGeneratedComWrappers : StrategyBasedComWr
             ComInterfaceEntry* vtable = (ComInterfaceEntry*)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(C), sizeof(ComInterfaceEntry) * 2);
             IIUnknownDerivedDetails? details;
             details = detailsStrategy.GetIUnknownDerivedDetails(typeof(IComInterface2).TypeHandle);
-            if (details is not null)
+            if (details is not null && details.ManagedVirtualMethodTable != null)
             {
                 vtable[0].IID = details.Iid;
                 vtable[0].Vtable = (nint)details.ManagedVirtualMethodTable;
             }
             details = detailsStrategy.GetIUnknownDerivedDetails(typeof(INotAComInterface).TypeHandle);
-            if (details is not null)
+            if (details is not null && details.ManagedVirtualMethodTable != null)
             {
                 vtable[1].IID = details.Iid;
                 vtable[1].Vtable = (nint)details.ManagedVirtualMethodTable;
@@ -87,13 +87,13 @@ internal sealed unsafe partial class MyGeneratedComWrappers : StrategyBasedComWr
             ComInterfaceEntry* vtable = (ComInterfaceEntry*)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(D), sizeof(ComInterfaceEntry) * 2);
             IIUnknownDerivedDetails? details;
             details = detailsStrategy.GetIUnknownDerivedDetails(typeof(IComInterface1).TypeHandle);
-            if (details is not null)
+            if (details is not null && details.ManagedVirtualMethodTable != null)
             {
                 vtable[0].IID = details.Iid;
                 vtable[0].Vtable = (nint)details.ManagedVirtualMethodTable;
             }
             details = detailsStrategy.GetIUnknownDerivedDetails(typeof(IComInterface4).TypeHandle);
-            if (details is not null)
+            if (details is not null && details.ManagedVirtualMethodTable != null)
             {
                 vtable[1].IID = details.Iid;
                 vtable[1].Vtable = (nint)details.ManagedVirtualMethodTable;
