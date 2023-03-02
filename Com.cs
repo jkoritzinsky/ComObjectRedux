@@ -54,21 +54,21 @@ public interface IIUnknownDerivedDetails
 }
 
 [AttributeUsage(AttributeTargets.Interface)]
-public sealed class IUnknownDerivedAttribute<T, TImpl> : Attribute, IIUnknownDerivedDetails
-    where T : IIUnknownInterfaceType
+public sealed class IUnknownDerivedAttribute<TInfo, TImpl> : Attribute, IIUnknownDerivedDetails
+    where TInfo : IIUnknownInterfaceType
 {
     public IUnknownDerivedAttribute()
     {
     }
 
     /// <inheritdoc />
-    public Guid Iid => T.Iid;
+    public Guid Iid => TInfo.Iid;
 
     /// <inheritdoc />
     public Type Implementation => typeof(TImpl);
 
     /// <inheritdoc />
-    public unsafe void** ManagedVirtualMethodTable => T.ManagedVirtualMethodTable;
+    public unsafe void** ManagedVirtualMethodTable => TInfo.ManagedVirtualMethodTable;
 }
 
 /// <summary>
