@@ -229,7 +229,7 @@ file unsafe static class ComInterfaceInformation
     {
         public static Guid Iid => new Guid("793d3e1c-f69d-492b-82fe-984a126e3a8f");
 
-        private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(global::IComInterface4), sizeof(void*) * 4);
+        private static readonly void** m_vtable = (void**)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(global::IComInterface4), sizeof(void*) * 5);
 
         public static void** ManagedVirtualMethodTable
         {
@@ -287,7 +287,7 @@ file unsafe static class ComInterfaceInformation
 
             void global::IComInterface1.Method()
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(global::IComInterface1));
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(global::IComInterface4));
                 int hr = ((delegate* unmanaged<void*, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
@@ -297,7 +297,7 @@ file unsafe static class ComInterfaceInformation
 
             void global::IComInterface4.DerivedMethod()
             {
-                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(global::IComInterface1));
+                var (thisPtr, vtable) = ((IUnmanagedVirtualMethodTableProvider)this).GetVirtualMethodTableInfoForKey(typeof(global::IComInterface4));
                 int hr = ((delegate* unmanaged<void*, int>)vtable[3])(thisPtr);
                 if (hr < 0)
                 {
