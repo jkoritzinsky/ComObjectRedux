@@ -71,6 +71,38 @@ public sealed class IUnknownDerivedAttribute<TInfo, TImpl> : Attribute, IIUnknow
     public unsafe void** ManagedVirtualMethodTable => TInfo.ManagedVirtualMethodTable;
 }
 
+public unsafe interface IComExposedClass
+{
+    public static abstract ComWrappers.ComInterfaceEntry* ComInterfaceEntries { get; }
+    public static abstract int InterfaceEntriesLength { get; }
+}
+
+public unsafe interface IComExposedDetails
+{
+    ComWrappers.ComInterfaceEntry* ComInterfaceEntries { get; }
+
+    int InterfaceEntriesLength { get; }
+
+    internal static IComExposedDetails? GetFromAttribute(RuntimeTypeHandle handle)
+    {
+        var type = Type.GetTypeFromHandle(handle);
+        if (type is null)
+        {
+            return null;
+        }
+        return (IComExposedDetails?)type.GetCustomAttribute(typeof(ComExposedClassAttribute<>));
+    }
+}
+
+[AttributeUsage(AttributeTargets.Class)]
+public sealed unsafe class ComExposedClassAttribute<T> : Attribute, IComExposedDetails
+    where T : IComExposedClass
+{
+    public ComWrappers.ComInterfaceEntry* ComInterfaceEntries => T.ComInterfaceEntries;
+
+    public int InterfaceEntriesLength => T.InterfaceEntriesLength;
+}
+
 /// <summary>
 /// IUnknown interaction strategy.
 /// </summary>
@@ -119,6 +151,13 @@ public interface IIUnknownInterfaceDetailsStrategy
     /// <param name="type">RuntimeTypeHandle instance</param>
     /// <returns>Details if type is known.</returns>
     IIUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type);
+
+    /// <summary>
+    /// Given a <see cref="RuntimeTypeHandle"/> get the details about the type that are exposed to COM.
+    /// </summary>
+    /// <param name="type">RuntimeTypeHandle instance</param>
+    /// <returns>Details if type is known.</returns>
+    IComExposedDetails? GetComExposedTypeDetails(RuntimeTypeHandle type);
 }
 
 /// <summary>
@@ -295,7 +334,7 @@ public sealed class GeneratedComInterfaceAttribute : Attribute
 {
 }
 
-public abstract class StrategyBasedComWrappers : ComWrappers
+public class StrategyBasedComWrappers : ComWrappers
 {
     public static IIUnknownInterfaceDetailsStrategy DefaultIUnknownInterfaceDetailsStrategy { get; } = Marshalling.DefaultIUnknownInterfaceDetailsStrategy.Instance;
 
@@ -327,6 +366,19 @@ public abstract class StrategyBasedComWrappers : ComWrappers
         return rcw;
     }
 
+    protected override sealed unsafe ComInterfaceEntry* ComputeVtables(object obj, CreateComInterfaceFlags flags, out int count)
+    {
+        IComExposedDetails? details = GetOrCreateInterfaceDetailsStrategy().GetComExposedTypeDetails(obj.GetType().TypeHandle);
+        if (details is null)
+        {
+            count = 0;
+            return null;
+        }
+
+        count = details.InterfaceEntriesLength;
+        return details.ComInterfaceEntries;
+    }
+
     protected override sealed void ReleaseObjects(IEnumerable objects)
     {
         throw new NotImplementedException();
@@ -336,10 +388,4 @@ public abstract class StrategyBasedComWrappers : ComWrappers
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
 public sealed class GeneratedComClassAttribute : Attribute
 {
-    public GeneratedComClassAttribute(Type classType)
-    {
-        ClassType = classType;
-    }
-
-    public Type ClassType { get; }
 }

@@ -1,7 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 
-class A : IComInterface1
+[GeneratedComClass]
+partial class A : IComInterface1
 {
     void IComInterface1.Method()
     {
@@ -14,7 +15,8 @@ class A : IComInterface1
 // IIUnknownInterfaceType (since IComInterface1 and IComInterface3 both implement it).
 // By making it generic, we can disambiguate the implementations
 // while still being able to retrieve the information we need through IUnknownDetailsAttribute.
-class B : IComInterface1, IComInterface3
+[GeneratedComClass]
+partial class B : IComInterface1, IComInterface3
 {
     void IComInterface1.Method()
     {
@@ -26,19 +28,30 @@ class B : IComInterface1, IComInterface3
     }
 }
 
-class C : IComInterface2
+interface INotAComInterface
+{
+    void Method();
+}
+
+[GeneratedComClass]
+partial class C : IComInterface2, INotAComInterface
 {
     void IComInterface2.Method1()
     {
-        Console.WriteLine("--- B.IComInterface2.Method1");
+        Console.WriteLine("--- C.IComInterface2.Method1");
     }
     void IComInterface2.Method2()
     {
-        Console.WriteLine("--- B.IComInterface2.Method2");
+        Console.WriteLine("--- C.IComInterface2.Method2");
+    }
+    void INotAComInterface.Method()
+    {
+        Console.WriteLine("--- C.INotAComInterface.Method");
     }
 }
 
-class D : IComInterface4
+[GeneratedComClass]
+partial class D : IComInterface4
 {
     void IComInterface1.Method()
     {

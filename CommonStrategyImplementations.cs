@@ -8,6 +8,11 @@ internal sealed class DefaultIUnknownInterfaceDetailsStrategy : IIUnknownInterfa
 {
     public static readonly IIUnknownInterfaceDetailsStrategy Instance = new DefaultIUnknownInterfaceDetailsStrategy();
 
+    public IComExposedDetails? GetComExposedTypeDetails(RuntimeTypeHandle type)
+    {
+        return IComExposedDetails.GetFromAttribute(type);
+    }
+
     public IIUnknownDerivedDetails? GetIUnknownDerivedDetails(RuntimeTypeHandle type)
     {
         return IIUnknownDerivedDetails.GetFromAttribute(type);

@@ -29,7 +29,3 @@ public partial interface IComInterface4 : IComInterface1
 {
     void DerivedMethod();
 }
-
-internal sealed partial class MyGeneratedComWrappers : StrategyBasedComWrappers
-{
-}
